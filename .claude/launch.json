@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fitlog",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-I", "-c", "import functools,http.server,socketserver; Handler=functools.partial(http.server.SimpleHTTPRequestHandler, directory='/Users/hubert/Desktop/dev/claude'); socketserver.TCPServer.allow_reuse_address=True; socketserver.TCPServer(('',8791),Handler).serve_forever()"],
+      "port": 8791
+    }
+  ]
+}
