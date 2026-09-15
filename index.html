@@ -334,9 +334,16 @@ function render(){
   const prevMain = document.querySelector("main");
   const keepScroll = (state.workout || state.editingRoutine) && prevMain;
   const scrollTop = keepScroll? prevMain.scrollTop : 0;
+  const active = document.activeElement;
+  const focusInfo = (active && active.id && document.getElementById("app").contains(active))
+    ? {id: active.id, start: active.selectionStart, end: active.selectionEnd} : null;
   document.getElementById("app").innerHTML = App();
   const newMain = document.querySelector("main");
   if(newMain) newMain.scrollTop = scrollTop;
+  if(focusInfo){
+    const el = document.getElementById(focusInfo.id);
+    if(el){ el.focus(); if(el.setSelectionRange) try{ el.setSelectionRange(focusInfo.start, focusInfo.end); }catch(e){} }
+  }
   afterRender();
 }
 
@@ -620,7 +627,7 @@ function finishWorkout(){
   const proceed = ()=>{
     maybeUpdateRoutineFromWorkout(w, ()=>{
       w.endedAt = new Date().toISOString();
-      const list = history(); list.push(w); saveHistory(list);
+      saveActive(w);
       state.workout=null; clearInterval(timerInterval);
       render();
     });
@@ -695,7 +702,7 @@ function ExercisePickerSheet(){
     <div class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title">Wybierz ćwiczenie</div>
-      <input placeholder="Szukaj…" value="${esc(p.query)}" style="width:100%;margin-bottom:10px"
+      <input id="picker-search" placeholder="Szukaj…" value="${esc(p.query)}" style="width:100%;margin-bottom:10px"
         oninput="state.picker.query=this.value; render();" autofocus>
       <div class="chipbar">
         ${["Wszystkie",...MUSCLES].map(m=>`
@@ -913,7 +920,7 @@ function CwiczeniaTab(){
   }).sort((a,b)=>a.name.localeCompare(b.name,"pl"));
 
   return `
-    <input placeholder="Szukaj ćwiczenia…" value="${esc(state.exerciseSearch)}" style="width:100%;margin-bottom:10px"
+    <input id="exercise-search" placeholder="Szukaj ćwiczenia…" value="${esc(state.exerciseSearch)}" style="width:100%;margin-bottom:10px"
       oninput="state.exerciseSearch=this.value; render();">
     <div class="chipbar">
       ${["Wszystkie",...MUSCLES].map(m=>`
