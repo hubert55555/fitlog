@@ -119,6 +119,7 @@ nav.bottomnav .ic{font-size:20px;line-height:1}
 <body>
 <div id="app"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* ---------- data: exercise catalogue ---------- */
 const MUSCLES = ["Klatka piersiowa","Plecy","Nogi","Barki (przód)","Barki (bok)","Barki (tył)","Biceps","Triceps","Brzuch","Pośladki","Łydki","Przedramiona","Całe ciało"];
@@ -192,30 +193,88 @@ const TEMPLATES = [
   { name:"Lower (Dół ciała)", ex:["Przysiad ze sztangą","Martwy ciąg rumuński","Wyciskanie nóg na suwnicy (leg press)","Uginanie nóg leżąc (leg curl)","Wspięcia na palce stojąc","Hip thrust"] },
 ].map(t=>({name:t.name, exerciseIds:t.ex.map(bid)}));
 
-/* ---------- storage ---------- */
-const store = {
-  get(key,fallback){ try{ const v=localStorage.getItem(key); return v? JSON.parse(v): fallback; }catch(e){ return fallback; } },
-  set(key,val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} },
-};
+/* ---------- backend (Supabase) ---------- */
+const SUPABASE_URL = "https://kazerxhglkvzvghysthi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_HgepJOMkgDApTjafGI1X3A_meVFWIut";
+let sb = null;
+let currentUser = null;
+let CACHE = { profile:null, exercises:[], routines:[], workouts:[] };
+
 const STORAGE_OK = (()=>{
   try{ const k="__fitlog_test__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }
   catch(e){ return false; }
 })();
-function customExercises(){ return store.get("fitlog.customExercises",[]); }
-function saveCustomExercises(list){ store.set("fitlog.customExercises",list); }
+
+function rowToWorkout(row){
+  return { id:row.id, name:row.name, routineId:row.routine_id, entries:row.entries||[], startedAt:row.started_at, endedAt:row.ended_at };
+}
+function workoutToRow(w){
+  return { id:w.id, user_id:currentUser.id, name:w.name, routine_id:w.routineId||null, entries:w.entries, started_at:w.startedAt, ended_at:w.endedAt||null };
+}
+async function syncTable(table, oldList, newList, toRow){
+  const oldIds = new Set(oldList.map(x=>x.id));
+  const newIds = new Set(newList.map(x=>x.id));
+  const removed = oldList.filter(x=>!newIds.has(x.id)).map(x=>x.id);
+  if(removed.length) await sb.from(table).delete().in("id", removed);
+  if(newList.length) await sb.from(table).upsert(newList.map(toRow));
+}
+
+function customExercises(){ return CACHE.exercises; }
+function saveCustomExercises(list){
+  const old = CACHE.exercises;
+  CACHE.exercises = list;
+  syncTable("exercises", old, list, e=>({id:e.id, name:e.name, muscle:e.muscle, created_by:currentUser.id}));
+}
 function allExercises(){ return BUILT_IN.concat(customExercises()); }
 function findExercise(id){ return allExercises().find(e=>e.id===id); }
 
-function routines(){ return store.get("fitlog.routines",[]); }
-function saveRoutines(list){ store.set("fitlog.routines",list); }
-function history(){ return store.get("fitlog.history",[]); }
-function saveHistory(list){ store.set("fitlog.history",list); }
-function getActive(){ return store.get("fitlog.active",null); }
-function saveActive(w){ store.set("fitlog.active",w); }
-function getUnit(){ return store.get("fitlog.unit","kg"); }
-function setUnit(u){ store.set("fitlog.unit",u); }
-function getTrackRir(){ return store.get("fitlog.trackRir",true); }
-function setTrackRir(v){ store.set("fitlog.trackRir",v); }
+function routines(){ return CACHE.routines; }
+function saveRoutines(list){
+  const old = CACHE.routines;
+  CACHE.routines = list;
+  syncTable("routines", old, list, r=>({id:r.id, user_id:currentUser.id, name:r.name, exercise_ids:r.exerciseIds}));
+}
+function history(){ return CACHE.workouts.filter(w=>w.endedAt); }
+function saveHistory(list){
+  const oldFinished = CACHE.workouts.filter(w=>w.endedAt);
+  const active = CACHE.workouts.filter(w=>!w.endedAt);
+  CACHE.workouts = [...list, ...active];
+  syncTable("workouts", oldFinished, list, workoutToRow);
+}
+function getActive(){ return CACHE.workouts.find(w=>!w.endedAt) || null; }
+function saveActive(w){
+  if(!w) return;
+  const idx = CACHE.workouts.findIndex(x=>x.id===w.id);
+  if(idx>=0) CACHE.workouts[idx]=w; else CACHE.workouts.push(w);
+  sb.from("workouts").upsert(workoutToRow(w));
+}
+function getUnit(){ return CACHE.profile? CACHE.profile.unit : "kg"; }
+function setUnit(u){ CACHE.profile.unit=u; sb.from("profiles").upsert({id:currentUser.id, unit:u, track_rir:CACHE.profile.track_rir}); }
+function getTrackRir(){ return CACHE.profile? CACHE.profile.track_rir : true; }
+function setTrackRir(v){ CACHE.profile.track_rir=v; sb.from("profiles").upsert({id:currentUser.id, unit:CACHE.profile.unit, track_rir:v}); }
+
+async function loadAllData(){
+  const uid = currentUser.id;
+  const [{data:profile},{data:exercises},{data:routines},{data:workouts}] = await Promise.all([
+    sb.from("profiles").select("*").eq("id",uid).maybeSingle(),
+    sb.from("exercises").select("*"),
+    sb.from("routines").select("*").eq("user_id",uid),
+    sb.from("workouts").select("*").eq("user_id",uid),
+  ]);
+  CACHE.profile = profile || {unit:"kg", track_rir:true};
+  CACHE.exercises = (exercises||[]).map(e=>({id:e.id, name:e.name, muscle:e.muscle, custom:true, createdBy:e.created_by}));
+  CACHE.routines = (routines||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
+  CACHE.workouts = (workouts||[]).map(rowToWorkout);
+  const active = getActive();
+  if(active){ state.workout = active; state.workout.mode="live"; }
+  state.authLoading = false;
+  render();
+  if(state.workout && state.workout.mode==="live") startTimer();
+}
+function signInWithGoogle(){
+  sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: window.location.origin + window.location.pathname } });
+}
+function signOut(){ sb.auth.signOut(); }
 
 /* ---------- helpers ---------- */
 function plCount(n){
@@ -225,7 +284,7 @@ function plCount(n){
   return n+" ćwiczeń";
 }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function uid(){ return crypto.randomUUID(); }
 function kgToLb(kg){ return kg*2.20462; }
 function lbToKg(lb){ return lb/2.20462; }
 function convWeight(kg){ return getUnit()==="lb"? kgToLb(kg): kg; }
@@ -268,6 +327,7 @@ const state = {
   settingsOpen: false,
   confirmDialog: null,  // {message, onYes}
   templatesOpen: false,
+  authLoading: true,
 };
 
 function render(){
@@ -283,6 +343,8 @@ function render(){
 /* ---------- root ---------- */
 function App(){
   if(!STORAGE_OK) return StorageWarning();
+  if(state.authLoading) return LoadingScreen();
+  if(!currentUser) return LoginScreen();
   return `
     ${TopBar()}
     <main>${TabContent()}</main>
@@ -293,6 +355,18 @@ function App(){
     ${state.exerciseForm? ExerciseFormSheet(): ""}
     ${state.confirmDialog? ConfirmDialogSheet(): ""}
   `;
+}
+
+function LoadingScreen(){
+  return `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--sub)">Wczytywanie…</div>`;
+}
+function LoginScreen(){
+  return `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+    <div style="font-size:48px;margin-bottom:12px">🏋️</div>
+    <h1 style="font-size:24px;margin-bottom:6px">FitLog</h1>
+    <p class="muted" style="margin-bottom:28px">Zaloguj się, żeby zapisywać swoje treningi.</p>
+    <button class="btn btn-accent" style="padding:13px 28px" onclick="signInWithGoogle()">Zaloguj się przez Google</button>
+  </div>`;
 }
 
 function StorageWarning(){
@@ -534,7 +608,10 @@ function openPickerForWorkout(){
 }
 function cancelWorkout(){
   askConfirm("Anulować trening? Postęp zostanie utracony.", ()=>{
-    state.workout=null; saveActive(null); clearInterval(timerInterval); render();
+    const w = state.workout;
+    CACHE.workouts = CACHE.workouts.filter(x=>x.id!==w.id);
+    sb.from("workouts").delete().eq("id",w.id);
+    state.workout=null; clearInterval(timerInterval); render();
   });
 }
 function finishWorkout(){
@@ -544,7 +621,7 @@ function finishWorkout(){
     maybeUpdateRoutineFromWorkout(w, ()=>{
       w.endedAt = new Date().toISOString();
       const list = history(); list.push(w); saveHistory(list);
-      state.workout=null; saveActive(null); clearInterval(timerInterval);
+      state.workout=null; clearInterval(timerInterval);
       render();
     });
   };
@@ -847,7 +924,7 @@ function CwiczeniaTab(){
       ${list.length===0? `<div class="empty">Brak wyników.</div>` : list.map(e=>`
         <div class="exlist-item" onclick="openExerciseDetail('${e.id}')" style="cursor:pointer">
           <div>${esc(e.name)}<div><span class="tag">${esc(e.muscle)}</span></div></div>
-          ${e.custom? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteCustomExercise('${e.id}')">Usuń</button>` : `<span class="muted">›</span>`}
+          ${e.custom && e.createdBy===currentUser?.id? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteCustomExercise('${e.id}')">Usuń</button>` : `<span class="muted">›</span>`}
         </div>`).join("")}
     </div>
     <button class="btn btn-accent btn-block" style="margin-top:12px" onclick="openNewExerciseForm()">+ Dodaj ćwiczenie</button>
@@ -890,7 +967,7 @@ function closeExerciseForm(){ state.exerciseForm=null; render(); }
 function saveExerciseForm(){
   const f = state.exerciseForm;
   if(!f.name.trim()) return;
-  const ex = { id:"c_"+uid(), name:f.name.trim(), muscle:f.muscle, custom:true };
+  const ex = { id:uid(), name:f.name.trim(), muscle:f.muscle, custom:true, createdBy:currentUser.id };
   const list = customExercises(); list.push(ex); saveCustomExercises(list);
   const ctx = f.context;
   state.exerciseForm = null;
@@ -990,6 +1067,11 @@ function SettingsSheet(){
           <button class="btn ${!rir?'btn-accent':'btn-ghost'}" style="flex:1" onclick="setTrackRir(false); render();">Nie</button>
         </div>
       </div>
+      <div class="field">
+        <label>Konto</label>
+        <div class="muted" style="margin-bottom:8px">${esc(currentUser?.email || "")}</div>
+        <button class="btn btn-danger btn-block" onclick="state.settingsOpen=false; signOut();">Wyloguj się</button>
+      </div>
       <button class="btn btn-ghost btn-block" onclick="state.settingsOpen=false; render();">Zamknij</button>
     </div>
   </div>`;
@@ -999,10 +1081,23 @@ function SettingsSheet(){
 function afterRender(){}
 
 (function init(){
-  const active = getActive();
-  if(active){ state.workout = active; state.workout.mode="live"; }
+  if(STORAGE_OK){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange((event, sessionObj)=>{
+      currentUser = sessionObj? sessionObj.user : null;
+      if(currentUser){
+        state.authLoading = true;
+        render();
+        loadAllData();
+      } else {
+        state.authLoading = false;
+        CACHE = { profile:null, exercises:[], routines:[], workouts:[] };
+        state.workout = null;
+        render();
+      }
+    });
+  }
   render();
-  if(state.workout && state.workout.mode==="live") startTimer();
   if("serviceWorker" in navigator){
     window.addEventListener("load", ()=> navigator.serviceWorker.register("./sw.js").catch(()=>{}));
   }
