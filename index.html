@@ -211,19 +211,28 @@ function rowToWorkout(row){
 function workoutToRow(w){
   return { id:w.id, user_id:currentUser.id, name:w.name, routine_id:w.routineId||null, entries:w.entries, started_at:w.startedAt, ended_at:w.endedAt||null };
 }
-async function syncTable(table, oldList, newList, toRow){
+function showSyncError(msg){ state.syncError = msg; render(); }
+function dismissSyncError(){ state.syncError = null; render(); }
+function dbWrite(promise, context){
+  Promise.resolve(promise).then(res=>{
+    if(res && res.error) showSyncError(`Nie zapisano (${context}): ${res.error.message}`);
+  }).catch(err=>{
+    showSyncError(`Nie zapisano (${context}): ${err.message}`);
+  });
+}
+async function syncTable(table, oldList, newList, toRow, context){
   const oldIds = new Set(oldList.map(x=>x.id));
   const newIds = new Set(newList.map(x=>x.id));
   const removed = oldList.filter(x=>!newIds.has(x.id)).map(x=>x.id);
-  if(removed.length) await sb.from(table).delete().in("id", removed);
-  if(newList.length) await sb.from(table).upsert(newList.map(toRow));
+  if(removed.length) dbWrite(sb.from(table).delete().in("id", removed), context);
+  if(newList.length) dbWrite(sb.from(table).upsert(newList.map(toRow)), context);
 }
 
 function customExercises(){ return CACHE.exercises; }
 function saveCustomExercises(list){
   const old = CACHE.exercises;
   CACHE.exercises = list;
-  syncTable("exercises", old, list, e=>({id:e.id, name:e.name, muscle:e.muscle, created_by:currentUser.id}));
+  syncTable("exercises", old, list, e=>({id:e.id, name:e.name, muscle:e.muscle, created_by:currentUser.id}), "baza ćwiczeń");
 }
 function allExercises(){ return BUILT_IN.concat(customExercises()); }
 function findExercise(id){ return allExercises().find(e=>e.id===id); }
@@ -232,44 +241,58 @@ function routines(){ return CACHE.routines; }
 function saveRoutines(list){
   const old = CACHE.routines;
   CACHE.routines = list;
-  syncTable("routines", old, list, r=>({id:r.id, user_id:currentUser.id, name:r.name, exercise_ids:r.exerciseIds}));
+  syncTable("routines", old, list, r=>({id:r.id, user_id:currentUser.id, name:r.name, exercise_ids:r.exerciseIds}), "plan");
 }
 function history(){ return CACHE.workouts.filter(w=>w.endedAt); }
 function saveHistory(list){
   const oldFinished = CACHE.workouts.filter(w=>w.endedAt);
   const active = CACHE.workouts.filter(w=>!w.endedAt);
   CACHE.workouts = [...list, ...active];
-  syncTable("workouts", oldFinished, list, workoutToRow);
+  syncTable("workouts", oldFinished, list, workoutToRow, "historia treningów");
 }
 function getActive(){ return CACHE.workouts.find(w=>!w.endedAt) || null; }
 function saveActive(w){
   if(!w) return;
   const idx = CACHE.workouts.findIndex(x=>x.id===w.id);
   if(idx>=0) CACHE.workouts[idx]=w; else CACHE.workouts.push(w);
-  sb.from("workouts").upsert(workoutToRow(w));
+  dbWrite(sb.from("workouts").upsert(workoutToRow(w)), "trening");
 }
 function getUnit(){ return CACHE.profile? CACHE.profile.unit : "kg"; }
-function setUnit(u){ CACHE.profile.unit=u; sb.from("profiles").upsert({id:currentUser.id, unit:u, track_rir:CACHE.profile.track_rir}); }
+function setUnit(u){
+  CACHE.profile.unit=u;
+  dbWrite(sb.from("profiles").upsert({id:currentUser.id, unit:u, track_rir:CACHE.profile.track_rir}), "ustawienia");
+}
 function getTrackRir(){ return CACHE.profile? CACHE.profile.track_rir : true; }
-function setTrackRir(v){ CACHE.profile.track_rir=v; sb.from("profiles").upsert({id:currentUser.id, unit:CACHE.profile.unit, track_rir:v}); }
+function setTrackRir(v){
+  CACHE.profile.track_rir=v;
+  dbWrite(sb.from("profiles").upsert({id:currentUser.id, unit:CACHE.profile.unit, track_rir:v}), "ustawienia");
+}
 
 async function loadAllData(){
   const uid = currentUser.id;
-  const [{data:profile},{data:exercises},{data:routines},{data:workouts}] = await Promise.all([
-    sb.from("profiles").select("*").eq("id",uid).maybeSingle(),
-    sb.from("exercises").select("*"),
-    sb.from("routines").select("*").eq("user_id",uid),
-    sb.from("workouts").select("*").eq("user_id",uid),
-  ]);
-  CACHE.profile = profile || {unit:"kg", track_rir:true};
-  CACHE.exercises = (exercises||[]).map(e=>({id:e.id, name:e.name, muscle:e.muscle, custom:true, createdBy:e.created_by}));
-  CACHE.routines = (routines||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
-  CACHE.workouts = (workouts||[]).map(rowToWorkout);
-  const active = getActive();
-  if(active){ state.workout = active; state.workout.mode="live"; }
-  state.authLoading = false;
-  render();
-  if(state.workout && state.workout.mode==="live") startTimer();
+  try{
+    const [profileRes, exercisesRes, routinesRes, workoutsRes] = await Promise.all([
+      sb.from("profiles").select("*").eq("id",uid).maybeSingle(),
+      sb.from("exercises").select("*"),
+      sb.from("routines").select("*").eq("user_id",uid),
+      sb.from("workouts").select("*").eq("user_id",uid),
+    ]);
+    const firstError = [profileRes, exercisesRes, routinesRes, workoutsRes].map(r=>r.error).find(Boolean);
+    if(firstError) throw firstError;
+    CACHE.profile = profileRes.data || {unit:"kg", track_rir:true};
+    CACHE.exercises = (exercisesRes.data||[]).map(e=>({id:e.id, name:e.name, muscle:e.muscle, custom:true, createdBy:e.created_by}));
+    CACHE.routines = (routinesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
+    CACHE.workouts = (workoutsRes.data||[]).map(rowToWorkout);
+    const active = getActive();
+    if(active){ state.workout = active; state.workout.mode="live"; }
+    state.authLoading = false;
+    state.syncError = null;
+    render();
+    if(state.workout && state.workout.mode==="live") startTimer();
+  }catch(err){
+    state.authLoading = false;
+    showSyncError("Nie udało się wczytać danych: "+err.message+" — spróbuj ponownie.");
+  }
 }
 function signInWithGoogle(){
   sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: window.location.origin + window.location.pathname } });
@@ -328,6 +351,7 @@ const state = {
   confirmDialog: null,  // {message, onYes}
   templatesOpen: false,
   authLoading: true,
+  syncError: null,
 };
 
 function render(){
@@ -352,7 +376,9 @@ function App(){
   if(!STORAGE_OK) return StorageWarning();
   if(state.authLoading) return LoadingScreen();
   if(!currentUser) return LoginScreen();
+  if(!CACHE.profile) return LoadFailedScreen();
   return `
+    ${state.syncError? SyncErrorBanner(): ""}
     ${TopBar()}
     <main>${TabContent()}</main>
     ${BottomNav()}
@@ -373,6 +399,20 @@ function LoginScreen(){
     <h1 style="font-size:24px;margin-bottom:6px">FitLog</h1>
     <p class="muted" style="margin-bottom:28px">Zaloguj się, żeby zapisywać swoje treningi.</p>
     <button class="btn btn-accent" style="padding:13px 28px" onclick="signInWithGoogle()">Zaloguj się przez Google</button>
+  </div>`;
+}
+function LoadFailedScreen(){
+  return `<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+    <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+    <p class="muted" style="margin-bottom:20px">${esc(state.syncError || "Nie udało się wczytać danych.")}</p>
+    <button class="btn btn-accent" onclick="state.syncError=null; state.authLoading=true; render(); loadAllData();">Spróbuj ponownie</button>
+  </div>`;
+}
+function SyncErrorBanner(){
+  return `<div style="flex:0 0 auto;background:var(--danger);color:#fff;padding:10px 16px;font-size:13px;
+    display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <span>⚠️ ${esc(state.syncError)}</span>
+    <button onclick="dismissSyncError()" style="background:none;border:none;color:#fff;font-weight:700;font-size:16px;flex:0 0 auto">✕</button>
   </div>`;
 }
 
@@ -617,7 +657,7 @@ function cancelWorkout(){
   askConfirm("Anulować trening? Postęp zostanie utracony.", ()=>{
     const w = state.workout;
     CACHE.workouts = CACHE.workouts.filter(x=>x.id!==w.id);
-    sb.from("workouts").delete().eq("id",w.id);
+    dbWrite(sb.from("workouts").delete().eq("id",w.id), "trening");
     state.workout=null; clearInterval(timerInterval); render();
   });
 }
