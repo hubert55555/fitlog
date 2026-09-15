@@ -21,11 +21,10 @@
   --nav-h: 56px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;height:100vh;height:100dvh;height:var(--vh100, 100dvh);
-  overflow:hidden;background:var(--bg);color:var(--text);
+html,body{margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;}
-#app{display:flex;flex-direction:column;height:100vh;height:100dvh;height:var(--vh100, 100dvh)}
+#app{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column}
 button,input,select{font-family:inherit;color:inherit}
 input,select{background:var(--card2);border:1px solid var(--border);border-radius:10px;
   color:var(--text);padding:9px 10px;font-size:15px;}
@@ -999,14 +998,7 @@ function SettingsSheet(){
 /* ---------- init ---------- */
 function afterRender(){}
 
-function setViewportHeight(){
-  document.documentElement.style.setProperty("--vh100", window.innerHeight + "px");
-}
-
 (function init(){
-  setViewportHeight();
-  window.addEventListener("resize", setViewportHeight);
-  window.addEventListener("orientationchange", setViewportHeight);
   const active = getActive();
   if(active){ state.workout = active; state.workout.mode="live"; }
   render();
