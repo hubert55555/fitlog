@@ -17,12 +17,14 @@
   --text:#f5f5f7; --sub:#9a9aa2; --accent:#a3e635; --accent-dim:#3f4a1f;
   --danger:#ef4444; --warn:#f59e0b;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --nav-h: 56px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;}
-body{padding-bottom:calc(64px + var(--safe-b));}
+body{padding-bottom:calc(var(--nav-h) + var(--safe-b));}
 button,input,select{font-family:inherit;color:inherit}
 input,select{background:var(--card2);border:1px solid var(--border);border-radius:10px;
   color:var(--text);padding:9px 10px;font-size:15px;}
@@ -39,7 +41,7 @@ button{cursor:pointer}
 .btn-sm{padding:7px 10px;font-size:13px;border-radius:9px}
 
 header.topbar{position:sticky;top:0;z-index:5;background:rgba(16,16,18,.92);
-  backdrop-filter:blur(8px);padding:14px 16px 10px;display:flex;align-items:center;
+  backdrop-filter:blur(8px);padding:calc(14px + var(--safe-t)) 16px 10px;display:flex;align-items:center;
   justify-content:space-between;border-bottom:1px solid var(--border)}
 header.topbar h1{font-size:19px;margin:0;font-weight:800}
 .icon-btn{background:none;border:none;color:var(--sub);font-size:20px;padding:4px 8px}
@@ -55,20 +57,22 @@ h2.section{font-size:14px;color:var(--sub);text-transform:uppercase;letter-spaci
 h2.section:first-child{margin-top:0}
 .empty{color:var(--sub);text-align:center;padding:30px 10px;font-size:14px}
 
-nav.bottomnav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#000000d9;
-  backdrop-filter:blur(10px);border-top:1px solid var(--border);
-  padding-bottom:var(--safe-b);z-index:10}
-nav.bottomnav button{flex:1;background:none;border:none;color:var(--sub);padding:9px 4px 8px;
-  display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600}
+nav.bottomnav{position:fixed;bottom:0;left:0;right:0;display:flex;height:var(--nav-h);
+  box-sizing:content-box;background:#000000d9;backdrop-filter:blur(10px);
+  border-top:1px solid var(--border);padding-bottom:var(--safe-b);z-index:10}
+nav.bottomnav button{flex:1;background:none;border:none;color:var(--sub);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  font-size:11px;font-weight:600}
 nav.bottomnav button.active{color:var(--accent)}
 nav.bottomnav .ic{font-size:20px;line-height:1}
 
-.set-row-wrap{position:relative;margin-bottom:6px}
-.set-row-bg{position:absolute;inset:0;background:var(--danger);border-radius:10px;
-  display:flex;align-items:center;padding-left:16px;color:#fff;font-weight:700;font-size:13px}
-.set-row{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px;gap:6px;align-items:center;
-  position:relative;background:var(--card);touch-action:pan-y}
-.set-row.warmup{border:1px solid var(--warn)}
+.set-row{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px 34px;gap:6px;align-items:center;
+  margin-bottom:6px}
+.set-row.no-rir{grid-template-columns:26px 1fr 1fr 34px 34px 34px}
+.set-row.warmup{border:1px solid var(--warn);border-radius:10px;padding:3px}
+.set-del{background:none;border:1px solid var(--border);border-radius:9px;color:var(--sub);
+  font-size:16px;height:34px;width:100%}
+.set-del:active{color:var(--danger)}
 .set-row input{width:100%;text-align:center;padding:8px 4px}
 .unit-swap{display:block;width:100%;background:none;border:none;color:var(--sub);
   font-size:10px;padding:2px 0 0;text-align:center}
@@ -81,9 +85,9 @@ nav.bottomnav .ic{font-size:20px;line-height:1}
 .done-toggle{border:1px solid var(--border);background:var(--card2);border-radius:9px;
   height:34px;font-size:16px;color:var(--sub)}
 .done-toggle.on{background:var(--accent);color:#0f1a02;border-color:var(--accent)}
-.set-del{background:none;border:none;color:var(--sub);font-size:16px}
-.set-labels{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px;gap:6px;
+.set-labels{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px 34px;gap:6px;
   font-size:10px;color:var(--sub);margin-bottom:4px;text-transform:uppercase}
+.set-labels.no-rir{grid-template-columns:26px 1fr 1fr 34px 34px 34px}
 .set-labels div{text-align:center}
 
 .overlay{position:fixed;inset:0;background:#000000b3;z-index:50;display:flex;
@@ -215,6 +219,8 @@ function getActive(){ return store.get("fitlog.active",null); }
 function saveActive(w){ store.set("fitlog.active",w); }
 function getUnit(){ return store.get("fitlog.unit","kg"); }
 function setUnit(u){ store.set("fitlog.unit",u); }
+function getTrackRir(){ return store.get("fitlog.trackRir",true); }
+function setTrackRir(v){ store.set("fitlog.trackRir",v); }
 
 /* ---------- helpers ---------- */
 function plCount(n){
@@ -357,11 +363,12 @@ function TreningTab(){
 function startWorkout(routineId){
   let entries = [];
   let name = "Trening dowolny";
+  let rid = null;
   if(routineId){
     const r = routines().find(x=>x.id===routineId);
-    if(r){ name = r.name; entries = r.exerciseIds.map(id=>({exerciseId:id, sets:[emptySet()]})); }
+    if(r){ name = r.name; entries = r.exerciseIds.map(id=>({exerciseId:id, sets:[emptySet()]})); rid = r.id; }
   }
-  state.workout = { mode:"live", id:uid(), name, startedAt:new Date().toISOString(), entries };
+  state.workout = { mode:"live", id:uid(), name, startedAt:new Date().toISOString(), entries, routineId:rid };
   saveActive(state.workout);
   render();
   startTimer();
@@ -415,6 +422,7 @@ function WorkoutEditor(){
 
 function ExerciseBlock(entry,ei,total){
   const ex = findExercise(entry.exerciseId);
+  const lastSets = lastWorkSets(entry.exerciseId);
   const hint = lastPerformanceText(entry.exerciseId);
   return `
   <div class="card">
@@ -430,33 +438,37 @@ function ExerciseBlock(entry,ei,total){
       </div>
     </div>
     <div class="muted" style="margin-bottom:8px;font-size:12px">Poprzednio: ${hint}</div>
-    <div class="set-labels"><div>#</div><div>${unitLabel()}</div><div>Powt.</div><div>RIR</div><div>🔥</div><div>✓</div></div>
-    ${entry.sets.map((s,si)=>SetRow(ei,si,s)).join("")}
+    <div class="set-labels ${getTrackRir()?'':'no-rir'}"><div>#</div><div>${unitLabel()}</div><div>Powt.</div>${getTrackRir()?'<div>RIR</div>':''}<div>W</div><div>✓</div><div></div></div>
+    ${entry.sets.map((s,si)=>SetRow(ei,si,s,lastSets)).join("")}
     <button class="btn btn-sm btn-ghost btn-block" onclick="addSet(${ei})">+ Dodaj serię</button>
   </div>`;
 }
 
-function SetRow(ei,si,s){
+function SetRow(ei,si,s,lastSets){
   const warmupSetsBefore = countWarmups(ei,si);
-  const idxLabel = s.warmup? "🔥" : (si+1-warmupSetsBefore);
+  const workIdx = si-warmupSetsBefore;
+  const idxLabel = s.warmup? "W" : workIdx+1;
   const altUnit = getUnit()==="kg"? "lb":"kg";
+  const ghost = s.warmup? null : lastSets[workIdx];
+  const gWeight = ghost? fmtWeight(ghost.weight) : "0";
+  const gReps = ghost? ghost.reps : "0";
+  const gRir = ghost && ghost.rir!=null? ghost.rir : "-";
+  const trackRir = getTrackRir();
   return `
-  <div class="set-row-wrap">
-    <div class="set-row-bg">✕ Usuń serię</div>
-    <div class="set-row ${s.warmup?'warmup':''}" data-ei="${ei}" data-si="${si}">
-      <div class="set-idx ${s.warmup?'warm':''}">${idxLabel}</div>
-      <div>
-        <input type="number" inputmode="decimal" step="0.5" placeholder="0" value="${fmtWeight(s.weight)}"
-          oninput="updateSet(${ei},${si},'weight',this.value)">
-        ${s.weight!=null? `<button class="unit-swap" onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>` : ""}
-      </div>
-      <input type="number" inputmode="numeric" placeholder="0" value="${s.reps??''}"
-        oninput="updateSet(${ei},${si},'reps',this.value)">
-      <input type="number" inputmode="numeric" min="0" max="10" placeholder="-" value="${s.rir??''}"
-        oninput="updateSet(${ei},${si},'rir',this.value)">
-      <button class="chip-toggle ${s.warmup?'on':''}" onclick="toggleWarmup(${ei},${si})" title="Oznacz jako rozgrzewkę">🔥</button>
-      <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
+  <div class="set-row ${s.warmup?'warmup':''} ${trackRir?'':'no-rir'}">
+    <div class="set-idx ${s.warmup?'warm':''}">${idxLabel}</div>
+    <div>
+      <input type="number" inputmode="decimal" step="0.5" placeholder="${gWeight}" value="${fmtWeight(s.weight)}"
+        oninput="updateSet(${ei},${si},'weight',this.value)">
+      ${s.weight!=null? `<button class="unit-swap" onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>` : ""}
     </div>
+    <input type="number" inputmode="numeric" placeholder="${gReps}" value="${s.reps??''}"
+      oninput="updateSet(${ei},${si},'reps',this.value)">
+    ${trackRir? `<input type="number" inputmode="numeric" min="0" max="10" placeholder="${gRir}" value="${s.rir??''}"
+      oninput="updateSet(${ei},${si},'rir',this.value)">` : ""}
+    <button class="chip-toggle ${s.warmup?'on':''}" onclick="toggleWarmup(${ei},${si})" title="Oznacz jako rozgrzewkę">🔥</button>
+    <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
+    <button class="set-del" onclick="removeSet(${ei},${si})" title="Usuń serię">✕</button>
   </div>`;
 }
 function countWarmups(ei,si){
@@ -527,6 +539,7 @@ function finishWorkout(){
   const w = state.workout;
   const hasSets = w.entries.some(e=>e.sets.some(s=>s.weight>0 || s.reps>0));
   if(!hasSets && !confirm("Trening nie ma zapisanych serii. Zakończyć mimo to?")) return;
+  maybeUpdateRoutineFromWorkout(w);
   w.endedAt = new Date().toISOString();
   const list = history(); list.push(w); saveHistory(list);
   state.workout=null; saveActive(null); clearInterval(timerInterval);
@@ -534,6 +547,7 @@ function finishWorkout(){
 }
 function closeWorkoutEditor(){ state.workout=null; render(); }
 function saveHistoryWorkout(){
+  maybeUpdateRoutineFromWorkout(state.workout);
   const list = history();
   const idx = list.findIndex(x=>x.id===state.workout.id);
   const copy = JSON.parse(JSON.stringify(state.workout)); delete copy.mode;
@@ -541,23 +555,42 @@ function saveHistoryWorkout(){
   saveHistory(list);
   state.workout=null; render();
 }
+function maybeUpdateRoutineFromWorkout(w){
+  if(!w.routineId) return;
+  const list = routines();
+  const r = list.find(x=>x.id===w.routineId);
+  if(!r) return;
+  const currentIds = w.entries.map(e=>e.exerciseId);
+  const same = currentIds.length===r.exerciseIds.length && currentIds.every((id,i)=>id===r.exerciseIds[i]);
+  if(same) return;
+  if(confirm(`Zmieniłeś ćwiczenia względem planu „${r.name}”. Zaktualizować plan o te zmiany?`)){
+    r.exerciseIds = currentIds;
+    saveRoutines(list);
+  }
+}
 function deleteHistoryWorkout(){
   if(!confirm("Usunąć ten trening z historii?")) return;
   saveHistory(history().filter(x=>x.id!==state.workout.id));
   state.workout=null; render();
 }
 
-function lastPerformanceText(exerciseId){
+function lastWorkSets(exerciseId){
   const hist = history().slice().sort((a,b)=> new Date(b.startedAt)-new Date(a.startedAt));
   for(const w of hist){
     if(state.workout && w.id===state.workout.id) continue;
     const entry = w.entries.find(e=>e.exerciseId===exerciseId);
     if(entry){
       const done = entry.sets.filter(s=>!s.warmup && s.weight>0 && s.reps>0);
-      if(done.length) return done.map(s=>`${fmtWeight(s.weight)}${unitLabel()}×${s.reps}`).join(", ");
+      if(done.length) return done;
     }
   }
-  return "brak historii";
+  return [];
+}
+function lastPerformanceText(exerciseId){
+  const sets = lastWorkSets(exerciseId);
+  if(!sets.length) return "brak historii";
+  const showRir = getTrackRir();
+  return sets.map(s=>`${fmtWeight(s.weight)}${unitLabel()}×${s.reps}${showRir && s.rir!=null? ` (RIR ${s.rir})`:""}`).join(", ");
 }
 
 /* ---------- exercise picker (shared: workout + routine) ---------- */
@@ -893,6 +926,7 @@ function ExerciseDetailSheet(){
 /* ---------- SETTINGS ---------- */
 function SettingsSheet(){
   const u = getUnit();
+  const rir = getTrackRir();
   return `<div class="overlay" onclick="if(event.target===this){state.settingsOpen=false; render();}">
     <div class="sheet">
       <div class="sheet-handle"></div>
@@ -904,40 +938,20 @@ function SettingsSheet(){
           <button class="btn ${u==='lb'?'btn-accent':'btn-ghost'}" style="flex:1" onclick="setUnit('lb'); render();">lb</button>
         </div>
       </div>
+      <div class="field">
+        <label>Śledzenie RIR (powtórzenia w rezerwie)</label>
+        <div class="pill-row">
+          <button class="btn ${rir?'btn-accent':'btn-ghost'}" style="flex:1" onclick="setTrackRir(true); render();">Tak</button>
+          <button class="btn ${!rir?'btn-accent':'btn-ghost'}" style="flex:1" onclick="setTrackRir(false); render();">Nie</button>
+        </div>
+      </div>
       <button class="btn btn-ghost btn-block" onclick="state.settingsOpen=false; render();">Zamknij</button>
     </div>
   </div>`;
 }
 
 /* ---------- init ---------- */
-function afterRender(){
-  document.querySelectorAll(".set-row[data-ei]").forEach(row=>{
-    let startX=0, startY=0, dx=0, tracking=false, engaged=false;
-    row.addEventListener("pointerdown", e=>{
-      startX=e.clientX; startY=e.clientY; dx=0; tracking=true; engaged=false;
-    });
-    row.addEventListener("pointermove", e=>{
-      if(!tracking) return;
-      const ndx=e.clientX-startX, ndy=e.clientY-startY;
-      if(!engaged){
-        if(Math.abs(ndx)<10 || Math.abs(ndy)>Math.abs(ndx)) return;
-        engaged=true; row.style.transition="none";
-      }
-      dx = Math.max(0, ndx);
-      row.style.transform = `translateX(${Math.min(dx,110)}px)`;
-    });
-    const end = ()=>{
-      if(!tracking) return;
-      tracking=false;
-      if(!engaged) return;
-      row.style.transition="transform .18s ease";
-      if(dx>85) removeSet(row.dataset.ei, row.dataset.si);
-      else row.style.transform="";
-    };
-    row.addEventListener("pointerup", end);
-    row.addEventListener("pointercancel", end);
-  });
-}
+function afterRender(){}
 
 (function init(){
   const active = getActive();
