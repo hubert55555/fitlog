@@ -21,10 +21,10 @@
   --nav-h: 56px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;}
-body{padding-bottom:calc(var(--nav-h) + var(--safe-b));}
+#app{display:flex;flex-direction:column;height:100%}
 button,input,select{font-family:inherit;color:inherit}
 input,select{background:var(--card2);border:1px solid var(--border);border-radius:10px;
   color:var(--text);padding:9px 10px;font-size:15px;}
@@ -40,13 +40,13 @@ button{cursor:pointer}
 .btn-block{width:100%}
 .btn-sm{padding:7px 10px;font-size:13px;border-radius:9px}
 
-header.topbar{position:sticky;top:0;z-index:5;background:rgba(16,16,18,.92);
-  backdrop-filter:blur(8px);padding:calc(14px + var(--safe-t)) 16px 10px;display:flex;align-items:center;
+header.topbar{flex:0 0 auto;background:rgba(16,16,18,.92);
+  padding:calc(14px + var(--safe-t)) 16px 10px;display:flex;align-items:center;
   justify-content:space-between;border-bottom:1px solid var(--border)}
 header.topbar h1{font-size:19px;margin:0;font-weight:800}
 .icon-btn{background:none;border:none;color:var(--sub);font-size:20px;padding:4px 8px}
 
-main{padding:14px 14px 24px}
+main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 24px;position:relative}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
 .card-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .muted{color:var(--sub);font-size:13px}
@@ -57,37 +57,34 @@ h2.section{font-size:14px;color:var(--sub);text-transform:uppercase;letter-spaci
 h2.section:first-child{margin-top:0}
 .empty{color:var(--sub);text-align:center;padding:30px 10px;font-size:14px}
 
-nav.bottomnav{position:fixed;bottom:0;left:0;right:0;display:flex;height:var(--nav-h);
-  box-sizing:content-box;background:#000000d9;backdrop-filter:blur(10px);
-  border-top:1px solid var(--border);padding-bottom:var(--safe-b);z-index:10}
+nav.bottomnav{flex:0 0 auto;display:flex;height:var(--nav-h);
+  box-sizing:content-box;background:#000000d9;
+  border-top:1px solid var(--border);padding-bottom:var(--safe-b)}
 nav.bottomnav button{flex:1;background:none;border:none;color:var(--sub);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   font-size:11px;font-weight:600}
 nav.bottomnav button.active{color:var(--accent)}
 nav.bottomnav .ic{font-size:20px;line-height:1}
 
-.set-row{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px 34px;gap:6px;align-items:center;
-  margin-bottom:6px}
-.set-row.no-rir{grid-template-columns:26px 1fr 1fr 34px 34px 34px}
-.set-row.warmup{border:1px solid var(--warn);border-radius:10px;padding:3px}
-.set-del{background:none;border:1px solid var(--border);border-radius:9px;color:var(--sub);
-  font-size:16px;height:34px;width:100%}
-.set-del:active{color:var(--danger)}
+.set-row-wrap{position:relative;margin-bottom:6px;border-radius:10px;overflow:hidden}
+.set-row-bg{position:absolute;inset:0;background:var(--danger);border-radius:10px;
+  display:flex;align-items:center;justify-content:flex-end;padding-right:16px;
+  color:#fff;font-weight:700;font-size:13px}
+.set-row{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px;gap:6px;align-items:center;
+  position:relative;background:var(--card);touch-action:pan-y}
+.set-row.no-rir{grid-template-columns:26px 1fr 1fr 34px}
+.set-row *{touch-action:pan-y}
 .set-row input{width:100%;text-align:center;padding:8px 4px}
 .unit-swap{display:block;width:100%;background:none;border:none;color:var(--sub);
   font-size:10px;padding:2px 0 0;text-align:center}
 .unit-swap:active{color:var(--accent)}
 .set-idx{text-align:center;font-weight:700;color:var(--sub);font-size:13px}
-.set-idx.warm{color:var(--warn)}
-.chip-toggle{border:1px solid var(--border);background:var(--card2);border-radius:9px;
-  height:34px;font-size:12px;font-weight:700;color:var(--sub)}
-.chip-toggle.on{background:var(--warn);color:#1a1200;border-color:var(--warn)}
 .done-toggle{border:1px solid var(--border);background:var(--card2);border-radius:9px;
   height:34px;font-size:16px;color:var(--sub)}
 .done-toggle.on{background:var(--accent);color:#0f1a02;border-color:var(--accent)}
-.set-labels{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px 34px 34px;gap:6px;
+.set-labels{display:grid;grid-template-columns:26px 1fr 1fr 56px 34px;gap:6px;
   font-size:10px;color:var(--sub);margin-bottom:4px;text-transform:uppercase}
-.set-labels.no-rir{grid-template-columns:26px 1fr 1fr 34px 34px 34px}
+.set-labels.no-rir{grid-template-columns:26px 1fr 1fr 34px}
 .set-labels div{text-align:center}
 
 .overlay{position:fixed;inset:0;background:#000000b3;z-index:50;display:flex;
@@ -398,7 +395,7 @@ function WorkoutEditor(){
   const w = state.workout;
   const isLive = w.mode==="live";
   return `
-    <div class="card" style="position:sticky;top:60px;z-index:4">
+    <div class="card" style="position:sticky;top:0;z-index:4">
       <input value="${esc(w.name)}" oninput="state.workout.name=this.value; persistWorkout(false);" style="font-weight:800;font-size:16px;border:none;background:none;padding:0;width:100%;margin-bottom:2px">
       ${isLive? `<div class="muted">⏱ <span id="live-timer" class="timer">${fmtDuration(Date.now()-new Date(w.startedAt).getTime())}</span></div>`
                : `<div class="muted">${fmtDate(w.startedAt)}</div>`}
@@ -438,43 +435,36 @@ function ExerciseBlock(entry,ei,total){
       </div>
     </div>
     <div class="muted" style="margin-bottom:8px;font-size:12px">Poprzednio: ${hint}</div>
-    <div class="set-labels ${getTrackRir()?'':'no-rir'}"><div>#</div><div>${unitLabel()}</div><div>Powt.</div>${getTrackRir()?'<div>RIR</div>':''}<div>W</div><div>✓</div><div></div></div>
+    <div class="set-labels ${getTrackRir()?'':'no-rir'}"><div>#</div><div>${unitLabel()}</div><div>Powt.</div>${getTrackRir()?'<div>RIR</div>':''}<div>✓</div></div>
     ${entry.sets.map((s,si)=>SetRow(ei,si,s,lastSets)).join("")}
     <button class="btn btn-sm btn-ghost btn-block" onclick="addSet(${ei})">+ Dodaj serię</button>
   </div>`;
 }
 
 function SetRow(ei,si,s,lastSets){
-  const warmupSetsBefore = countWarmups(ei,si);
-  const workIdx = si-warmupSetsBefore;
-  const idxLabel = s.warmup? "W" : workIdx+1;
   const altUnit = getUnit()==="kg"? "lb":"kg";
-  const ghost = s.warmup? null : lastSets[workIdx];
+  const ghost = lastSets[si];
   const gWeight = ghost? fmtWeight(ghost.weight) : "0";
   const gReps = ghost? ghost.reps : "0";
   const gRir = ghost && ghost.rir!=null? ghost.rir : "-";
   const trackRir = getTrackRir();
   return `
-  <div class="set-row ${s.warmup?'warmup':''} ${trackRir?'':'no-rir'}">
-    <div class="set-idx ${s.warmup?'warm':''}">${idxLabel}</div>
-    <div>
-      <input type="number" inputmode="decimal" step="0.5" placeholder="${gWeight}" value="${fmtWeight(s.weight)}"
-        oninput="updateSet(${ei},${si},'weight',this.value)">
-      ${s.weight!=null? `<button class="unit-swap" onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>` : ""}
+  <div class="set-row-wrap">
+    <div class="set-row-bg">Usuń serię ✕</div>
+    <div class="set-row ${trackRir?'':'no-rir'}" data-ei="${ei}" data-si="${si}">
+      <div class="set-idx">${si+1}</div>
+      <div>
+        <input type="number" inputmode="decimal" step="0.5" placeholder="${gWeight}" value="${fmtWeight(s.weight)}"
+          oninput="updateSet(${ei},${si},'weight',this.value)">
+        ${s.weight!=null? `<button class="unit-swap" onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>` : ""}
+      </div>
+      <input type="number" inputmode="numeric" placeholder="${gReps}" value="${s.reps??''}"
+        oninput="updateSet(${ei},${si},'reps',this.value)">
+      ${trackRir? `<input type="number" inputmode="numeric" min="0" max="10" placeholder="${gRir}" value="${s.rir??''}"
+        oninput="updateSet(${ei},${si},'rir',this.value)">` : ""}
+      <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
     </div>
-    <input type="number" inputmode="numeric" placeholder="${gReps}" value="${s.reps??''}"
-      oninput="updateSet(${ei},${si},'reps',this.value)">
-    ${trackRir? `<input type="number" inputmode="numeric" min="0" max="10" placeholder="${gRir}" value="${s.rir??''}"
-      oninput="updateSet(${ei},${si},'rir',this.value)">` : ""}
-    <button class="chip-toggle ${s.warmup?'on':''}" onclick="toggleWarmup(${ei},${si})" title="Oznacz jako rozgrzewkę">🔥</button>
-    <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
-    <button class="set-del" onclick="removeSet(${ei},${si})" title="Usuń serię">✕</button>
   </div>`;
-}
-function countWarmups(ei,si){
-  const entry = state.workout.entries[ei];
-  let c=0; for(let i=0;i<si;i++) if(entry.sets[i].warmup) c++;
-  return c;
 }
 
 function persistWorkout(doRender){
@@ -493,11 +483,6 @@ function reinterpretWeight(ei,si){
   if(s.weight==null) return;
   const shown = convWeight(s.weight);
   s.weight = getUnit()==="kg"? lbToKg(shown): kgToLb(shown);
-  persistWorkout(true);
-}
-function toggleWarmup(ei,si){
-  const s = state.workout.entries[ei].sets[si];
-  s.warmup = !s.warmup;
   persistWorkout(true);
 }
 function toggleDone(ei,si){
@@ -951,7 +936,35 @@ function SettingsSheet(){
 }
 
 /* ---------- init ---------- */
-function afterRender(){}
+function afterRender(){
+  document.querySelectorAll(".set-row[data-ei]").forEach(row=>{
+    let startX=0, startY=0, dx=0, tracking=false, engaged=false;
+    row.addEventListener("pointerdown", e=>{
+      startX=e.clientX; startY=e.clientY; dx=0; tracking=true; engaged=false;
+    });
+    row.addEventListener("pointermove", e=>{
+      if(!tracking) return;
+      const ndx=e.clientX-startX, ndy=e.clientY-startY;
+      if(!engaged){
+        if(Math.abs(ndx)<10 || Math.abs(ndy)>Math.abs(ndx)) return;
+        engaged=true; row.style.transition="none";
+        try{ row.setPointerCapture(e.pointerId); }catch(err){}
+      }
+      dx = Math.max(0, ndx);
+      row.style.transform = `translateX(${Math.min(dx,110)}px)`;
+    });
+    const end=()=>{
+      if(!tracking) return;
+      tracking=false;
+      if(!engaged) return;
+      row.style.transition="transform .18s ease";
+      if(dx>85) removeSet(row.dataset.ei, row.dataset.si);
+      else row.style.transform="";
+    };
+    row.addEventListener("pointerup", end);
+    row.addEventListener("pointercancel", end);
+  });
+}
 
 (function init(){
   const active = getActive();
