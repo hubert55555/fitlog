@@ -21,10 +21,11 @@
   --nav-h: 56px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;height:100vh;height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);
+html,body{margin:0;padding:0;height:100vh;height:100dvh;height:var(--vh100, 100dvh);
+  overflow:hidden;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;}
-#app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;height:var(--vh100, 100dvh)}
 button,input,select{font-family:inherit;color:inherit}
 input,select{background:var(--card2);border:1px solid var(--border);border-radius:10px;
   color:var(--text);padding:9px 10px;font-size:15px;}
@@ -267,6 +268,7 @@ const state = {
   quickAdd: null,       // {mode:'workout'|'routine', query} inside picker
   settingsOpen: false,
   confirmDialog: null,  // {message, onYes}
+  templatesOpen: false,
 };
 
 function render(){
@@ -443,7 +445,7 @@ function ExerciseBlock(entry,ei,total){
       </div>
     </div>
     <div class="muted" style="margin-bottom:8px;font-size:12px">Poprzednio: ${hint}</div>
-    <div class="set-labels ${getTrackRir()?'':'no-rir'}"><div>#</div><div>${unitLabel()}</div><div>Powt.</div>${getTrackRir()?'<div>RIR</div>':''}<div>✓</div><div></div></div>
+    <div class="set-labels ${getTrackRir()?'':'no-rir'}"><div>#</div><div>${unitLabel()}</div><div>Powt.</div>${getTrackRir()?'<div>RIR</div>':''}<div></div><div>✓</div></div>
     ${entry.sets.map((s,si)=>SetRow(ei,si,s,lastSets)).join("")}
     <button class="btn btn-sm btn-ghost btn-block" onclick="addSet(${ei})">+ Dodaj serię</button>
   </div>`;
@@ -468,8 +470,8 @@ function SetRow(ei,si,s,lastSets){
       oninput="updateSet(${ei},${si},'reps',this.value)">
     ${trackRir? `<input type="number" inputmode="numeric" min="0" max="10" placeholder="${gRir}" value="${s.rir??''}"
       oninput="updateSet(${ei},${si},'rir',this.value)">` : ""}
-    <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
     <button class="set-del" onclick="removeSet(${ei},${si})" title="Usuń serię">✕</button>
+    <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${ei},${si})" title="Oznacz jako wykonaną">✓</button>
   </div>`;
 }
 
@@ -676,14 +678,19 @@ function PlanyTab(){
           </div>
         </div>`).join("")}
 
-    <h2 class="section">Gotowe szablony</h2>
-    ${TEMPLATES.map(t=>`
+    <div class="card" style="cursor:pointer;padding:0" onclick="state.templatesOpen=!state.templatesOpen; render();">
+      <div class="card-row" style="padding:14px">
+        <b>Gotowe szablony</b>
+        <span class="muted">${state.templatesOpen? "▾" : "▸"}</span>
+      </div>
+    </div>
+    ${state.templatesOpen? TEMPLATES.map(t=>`
       <div class="card">
         <div class="card-row">
           <div><b>${esc(t.name)}</b><div class="muted">${plCount(t.exerciseIds.length)}: ${t.exerciseIds.map(id=>findExercise(id)?.name).filter(Boolean).join(", ")}</div></div>
         </div>
         <button class="btn btn-sm btn-ghost btn-block" style="margin-top:10px" onclick="addTemplate('${esc(t.name)}')">Dodaj do moich planów</button>
-      </div>`).join("")}
+      </div>`).join("") : ""}
   `;
 }
 function newRoutine(){ state.editingRoutine = { id:null, name:"Nowy plan", exerciseIds:[] }; render(); }
@@ -992,7 +999,14 @@ function SettingsSheet(){
 /* ---------- init ---------- */
 function afterRender(){}
 
+function setViewportHeight(){
+  document.documentElement.style.setProperty("--vh100", window.innerHeight + "px");
+}
+
 (function init(){
+  setViewportHeight();
+  window.addEventListener("resize", setViewportHeight);
+  window.addEventListener("orientationchange", setViewportHeight);
   const active = getActive();
   if(active){ state.workout = active; state.workout.mode="live"; }
   render();
