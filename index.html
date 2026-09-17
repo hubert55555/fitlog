@@ -70,9 +70,6 @@ nav.bottomnav .ic{font-size:20px;line-height:1}
   margin-bottom:8px}
 .set-row.no-rir{grid-template-columns:26px 1fr 1fr 42px 42px}
 .set-row input{width:100%;text-align:center;padding:8px 4px}
-.unit-swap{display:block;width:100%;background:none;border:none;color:var(--sub);
-  font-size:10px;padding:2px 0 0;text-align:center}
-.unit-swap:active{color:var(--accent)}
 .set-idx{text-align:center;font-weight:700;color:var(--sub);font-size:13px}
 .done-toggle{border:1px solid var(--border);background:var(--card2);border-radius:9px;
   height:42px;font-size:19px;color:var(--sub)}
@@ -576,7 +573,6 @@ function ExerciseBlock(entry,ei,total){
 }
 
 function SetRow(ei,si,s,lastSets){
-  const altUnit = getUnit()==="kg"? "lb":"kg";
   const ghost = lastSets[si];
   const gWeight = ghost? fmtWeight(ghost.weight) : "0";
   const gReps = ghost? ghost.reps : "0";
@@ -588,7 +584,6 @@ function SetRow(ei,si,s,lastSets){
     <div>
       <input type="text" inputmode="decimal" placeholder="${gWeight}" value="${fmtWeight(s.weight)}"
         oninput="updateSet(${ei},${si},'weight',this.value)">
-      <button class="unit-swap" ${s.weight!=null? "" : 'style="visibility:hidden"'} onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>
     </div>
     <input type="number" inputmode="numeric" placeholder="${gReps}" value="${s.reps??''}"
       oninput="updateSet(${ei},${si},'reps',this.value)">
@@ -609,13 +604,6 @@ function updateSet(ei,si,field,val){
   else if(field==="reps") s.reps = val===""? null : parseInt(val,10);
   else if(field==="rir") s.rir = val===""? null : parseInt(val,10);
   persistWorkout(false);
-}
-function reinterpretWeight(ei,si){
-  const s = state.workout.entries[ei].sets[si];
-  if(s.weight==null) return;
-  const shown = convWeight(s.weight);
-  s.weight = getUnit()==="kg"? lbToKg(shown): kgToLb(shown);
-  persistWorkout(true);
 }
 function toggleDone(ei,si){
   const entry = state.workout.entries[ei];
