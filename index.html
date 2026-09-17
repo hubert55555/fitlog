@@ -560,7 +560,6 @@ function ExerciseBlock(entry,ei,total){
         ${ex? exerciseThumb(ex,40,"cursor:pointer;",`onclick="openExerciseDetail('${ex.id}')"`) : ""}
         <div>
           <b>${esc(ex? ex.name : "Nieznane ćwiczenie")}</b>
-          <div style="margin-top:4px">${exerciseMuscleTags(ex)}</div>
         </div>
       </div>
       <div class="pill-row">
@@ -763,7 +762,7 @@ function ExercisePickerSheet(){
       ${list.map(e=>`
         <div class="picker-item" onclick="pickExercise('${e.id}')">
           ${exerciseThumb(e,36,"margin-right:10px;")}
-          <div>${esc(e.name)}<div class="muted" style="margin-top:2px">${(e.muscles&&e.muscles.length? e.muscles : [e.muscle]).slice(0,2).map(m=>esc(m)).join(" • ")}</div></div>
+          <div style="flex:1;min-width:0">${esc(e.name)}<div class="muted" style="margin-top:2px">${(e.muscles&&e.muscles.length? e.muscles : [e.muscle]).slice(0,2).map(m=>esc(m)).join(" • ")}</div></div>
           <span class="muted">+</span>
         </div>`).join("")}
       ${!exactMatch && q? `
@@ -787,10 +786,6 @@ function pickExercise(exerciseId){
       state.editingRoutine.exerciseIds.push(exerciseId);
     render();
   }
-}
-function quickAddExercise(name){
-  state.exerciseForm = { name, muscle:MUSCLES[0], context:"picker" };
-  render();
 }
 
 /* ---------- PLANY TAB ---------- */
@@ -992,7 +987,7 @@ function CwiczeniaTab(){
       ${list.length===0? `<div class="empty">Brak wyników.</div>` : list.map(e=>`
         <div class="exlist-item" onclick="openExerciseDetail('${e.id}')" style="cursor:pointer">
           ${exerciseThumb(e,36,"margin-right:10px;")}
-          <div>${esc(e.name)}<div style="margin-top:2px">${exerciseMuscleTags(e,2)}</div></div>
+          <div style="flex:1;min-width:0">${esc(e.name)}<div style="margin-top:2px">${exerciseMuscleTags(e,2)}</div></div>
           ${e.custom && e.createdBy===currentUser?.id? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteCustomExercise('${e.id}')">Usuń</button>` : `<span class="muted">›</span>`}
         </div>`).join("")}
     </div>
