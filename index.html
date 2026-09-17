@@ -588,7 +588,7 @@ function SetRow(ei,si,s,lastSets){
     <div>
       <input type="text" inputmode="decimal" placeholder="${gWeight}" value="${fmtWeight(s.weight)}"
         oninput="updateSet(${ei},${si},'weight',this.value)">
-      ${s.weight!=null? `<button class="unit-swap" onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>` : ""}
+      <button class="unit-swap" ${s.weight!=null? "" : 'style="visibility:hidden"'} onclick="reinterpretWeight(${ei},${si})">⇄ ${altUnit}</button>
     </div>
     <input type="number" inputmode="numeric" placeholder="${gReps}" value="${s.reps??''}"
       oninput="updateSet(${ei},${si},'reps',this.value)">
