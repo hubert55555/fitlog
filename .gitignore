@@ -1,0 +1,6 @@
+.DS_Store
+
+# Skills CLI tooling (npx skills add) — machine-local, reinstallable
+.agents/
+.claude/skills/
+skills-lock.json
