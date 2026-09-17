@@ -4,3 +4,6 @@
 .agents/
 .claude/skills/
 skills-lock.json
+
+# graphify output — local knowledge-graph cache/report, not app code
+graphify-out/
