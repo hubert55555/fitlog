@@ -122,7 +122,12 @@ nav.bottomnav .ic{font-size:20px;line-height:1}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* ---------- data: exercise catalogue ---------- */
-const MUSCLES = ["Klatka piersiowa","Plecy","Nogi","Barki (przód)","Barki (bok)","Barki (tył)","Biceps","Triceps","Brzuch","Pośladki","Łydki","Przedramiona","Całe ciało"];
+// Taken from the dataset's own `target` field (19 values, see supabase_exercises.sql) —
+// not a made-up split. Order: torso front-to-back, then arms, then legs, then misc.
+const MUSCLES = ["Klatka piersiowa","Górna część pleców","Najszersze grzbietu","Czworoboczny grzbietu","Barki","Biceps","Triceps","Przedramiona","Brzuch","Kręgosłup","Czworogłowe uda","Dwugłowe uda","Pośladki","Przywodziciele","Odwodziciele","Łydki","Zębaty przedni","Dźwigacz łopatki","Cardio"];
+const EXERCISE_MEDIA_ATTRIBUTION = "© Gym visual — gymvisual.com";
+function capitalize(s){ return s? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function equipmentList(){ return [...new Set(allExercises().map(e=>e.equipment).filter(Boolean))].sort(); }
 
 function slugify(s){
   return "b_"+s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
@@ -188,10 +193,20 @@ function saveCustomExercises(list){
 }
 function allExercises(){ return CACHE.exercises; }
 function findExercise(id){ return CACHE.exercises.find(e=>e.id===id); }
-function exerciseMuscleTags(ex){
+function exerciseMuscleTags(ex, limit){
   if(!ex) return "";
-  const list = (ex.muscles && ex.muscles.length)? ex.muscles : (ex.muscle? [ex.muscle] : []);
-  return list.map(m=>`<span class="tag">${esc(m)}</span>`).join(" ");
+  let list = (ex.muscles && ex.muscles.length)? ex.muscles : (ex.muscle? [ex.muscle] : []);
+  const extra = limit && list.length>limit ? list.length-limit : 0;
+  if(limit) list = list.slice(0,limit);
+  return list.map(m=>`<span class="tag">${esc(m)}</span>`).join(" ") + (extra? ` <span class="tag">+${extra}</span>` : "");
+}
+// Fixed-size thumbnail slot so rows line up whether or not an exercise has a
+// dataset photo (built-ins/custom exercises never do) — no image means a same-size
+// placeholder, never a missing slot that shifts the name text left.
+function exerciseThumb(ex, size, styleExtra, attrsExtra){
+  const style = `width:${size}px;height:${size}px;border-radius:${Math.round(size*0.22)}px;flex:0 0 auto;${styleExtra||""}`;
+  if(ex && ex.imageUrl) return `<img src="${esc(ex.imageUrl)}" loading="lazy" alt="" style="${style}object-fit:cover" ${attrsExtra||""}>`;
+  return `<div style="${style}background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.45)}px" ${attrsExtra||""}>🏋️</div>`;
 }
 
 function routines(){ return CACHE.routines; }
@@ -225,12 +240,25 @@ function setTrackRir(v){
   dbWrite(sb.from("profiles").upsert({id:currentUser.id, unit:CACHE.profile.unit, track_rir:v}), "ustawienia");
 }
 
+// PostgREST caps a plain .select() at 1000 rows (db-max-rows) — the exercise
+// catalogue (1300+ rows) needs paging past that, unlike the per-user tables below.
+async function fetchAllExercises(){
+  const PAGE = 1000;
+  let all = [], from = 0;
+  while(true){
+    const res = await sb.from("exercises").select("*").range(from, from+PAGE-1);
+    if(res.error) return res;
+    all = all.concat(res.data);
+    if(res.data.length < PAGE) return {data: all, error: null};
+    from += PAGE;
+  }
+}
 async function loadAllData(){
   const uid = currentUser.id;
   try{
     const [profileRes, exercisesRes, routinesRes, workoutsRes] = await Promise.all([
       sb.from("profiles").select("*").eq("id",uid).maybeSingle(),
-      sb.from("exercises").select("*"),
+      fetchAllExercises(),
       sb.from("routines").select("*").eq("user_id",uid),
       sb.from("workouts").select("*").eq("user_id",uid),
     ]);
@@ -243,7 +271,16 @@ async function loadAllData(){
       muscle: e.muscle || (Array.isArray(e.muscles) && e.muscles.length ? e.muscles[0] : ""),
       muscles: Array.isArray(e.muscles) ? e.muscles : (e.muscle ? [e.muscle] : []),
       custom: !!e.created_by,
-      createdBy: e.created_by
+      createdBy: e.created_by,
+      bodyPart: e.body_part || "",
+      equipment: e.equipment || "",
+      target: e.target || "",
+      secondaryMuscles: e.secondary_muscles || [],
+      imageUrl: e.image_url || "",
+      gifUrl: e.gif_url || "",
+      // ponytail: only the Polish instructions are stored/shown for now — see the
+      // "Extra columns" comment in supabase_exercises.sql for how to add a language switcher.
+      instructionsPl: e.instructions_pl || "",
     }));
     CACHE.routines = (routinesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
     CACHE.workouts = (workoutsRes.data||[]).map(rowToWorkout);
@@ -308,6 +345,7 @@ const state = {
   picker: null,        // {onPick, query, muscle}
   exerciseSearch: "",
   exerciseMuscleFilter: "Wszystkie",
+  exerciseEquipmentFilter: "Wszystkie",
   statsPeriod: 30,
   exerciseDetail: null,
   quickAdd: null,       // {mode:'workout'|'routine', query} inside picker
@@ -518,9 +556,12 @@ function ExerciseBlock(entry,ei,total){
   return `
   <div class="card">
     <div class="card-row" style="margin-bottom:8px">
-      <div>
-        <b>${esc(ex? ex.name : "Nieznane ćwiczenie")}</b>
-        <div style="margin-top:4px">${exerciseMuscleTags(ex)}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${ex? exerciseThumb(ex,40,"cursor:pointer;",`onclick="openExerciseDetail('${ex.id}')"`) : ""}
+        <div>
+          <b>${esc(ex? ex.name : "Nieznane ćwiczenie")}</b>
+          <div style="margin-top:4px">${exerciseMuscleTags(ex)}</div>
+        </div>
       </div>
       <div class="pill-row">
         <button class="btn-sm btn-ghost btn" ${ei===0?"disabled":""} onclick="moveExercise(${ei},-1)">↑</button>
@@ -614,7 +655,7 @@ function moveExercise(ei,dir){
 }
 
 function openPickerForWorkout(){
-  state.picker = { target:"workout", query:"", muscle:"Wszystkie" };
+  state.picker = { target:"workout", query:"", muscle:"Wszystkie", equipment:"Wszystkie" };
   render();
 }
 function cancelWorkout(){
@@ -697,7 +738,8 @@ function ExercisePickerSheet(){
   let list = allExercises().filter(e=>{
     const matchesQ = !q || e.name.toLowerCase().includes(q);
     const matchesM = p.muscle==="Wszystkie" || e.muscle===p.muscle || (e.muscles && e.muscles.includes(p.muscle));
-    return matchesQ && matchesM;
+    const matchesEq = p.equipment==="Wszystkie" || e.equipment===p.equipment;
+    return matchesQ && matchesM && matchesEq;
   }).sort((a,b)=>a.name.localeCompare(b.name,"pl"));
 
   const exactMatch = list.some(e=>e.name.toLowerCase()===q);
@@ -713,9 +755,15 @@ function ExercisePickerSheet(){
           <button class="chip ${p.muscle===m?'active':''}" onclick="state.picker.muscle='${m}'; render();">${m}</button>
         `).join("")}
       </div>
+      <div class="chipbar" style="margin-top:6px">
+        ${["Wszystkie",...equipmentList()].map(eq=>`
+          <button class="chip ${p.equipment===eq?'active':''}" onclick="state.picker.equipment='${esc(eq)}'; render();">${esc(capitalize(eq))}</button>
+        `).join("")}
+      </div>
       ${list.map(e=>`
         <div class="picker-item" onclick="pickExercise('${e.id}')">
-          <div>${esc(e.name)}<div class="muted" style="margin-top:2px">${(e.muscles&&e.muscles.length? e.muscles : [e.muscle]).map(m=>esc(m)).join(" • ")}</div></div>
+          ${exerciseThumb(e,36,"margin-right:10px;")}
+          <div>${esc(e.name)}<div class="muted" style="margin-top:2px">${(e.muscles&&e.muscles.length? e.muscles : [e.muscle]).slice(0,2).map(m=>esc(m)).join(" • ")}</div></div>
           <span class="muted">+</span>
         </div>`).join("")}
       ${!exactMatch && q? `
@@ -811,7 +859,7 @@ function RoutineEditor(){
       r.exerciseIds.map((id,i)=>{
         const ex = findExercise(id);
         return `<div class="exlist-item">
-          <div>${esc(ex? ex.name : "Nieznane")}<div style="margin-top:2px">${exerciseMuscleTags(ex)}</div></div>
+          <div>${esc(ex? ex.name : "Nieznane")}<div style="margin-top:2px">${exerciseMuscleTags(ex,2)}</div></div>
           <div class="pill-row">
             <button class="btn btn-sm btn-ghost" ${i===0?"disabled":""} onclick="moveRoutineExercise(${i},-1)">↑</button>
             <button class="btn btn-sm btn-ghost" ${i===r.exerciseIds.length-1?"disabled":""} onclick="moveRoutineExercise(${i},1)">↓</button>
@@ -819,7 +867,7 @@ function RoutineEditor(){
           </div>
         </div>`;
       }).join("")}
-    <button class="btn btn-ghost btn-block" style="margin:10px 0" onclick="state.picker={target:'routine',query:'',muscle:'Wszystkie'}; render();">+ Dodaj ćwiczenie</button>
+    <button class="btn btn-ghost btn-block" style="margin:10px 0" onclick="state.picker={target:'routine',query:'',muscle:'Wszystkie',equipment:'Wszystkie'}; render();">+ Dodaj ćwiczenie</button>
 
     <div class="pill-row">
       <button class="btn btn-ghost" style="flex:1" onclick="state.editingRoutine=null; render();">Anuluj</button>
@@ -923,7 +971,8 @@ function CwiczeniaTab(){
   const list = allExercises().filter(e=>{
     const mQ = !q || e.name.toLowerCase().includes(q);
     const mM = state.exerciseMuscleFilter==="Wszystkie" || e.muscle===state.exerciseMuscleFilter || (e.muscles && e.muscles.includes(state.exerciseMuscleFilter));
-    return mQ && mM;
+    const mEq = state.exerciseEquipmentFilter==="Wszystkie" || e.equipment===state.exerciseEquipmentFilter;
+    return mQ && mM && mEq;
   }).sort((a,b)=>a.name.localeCompare(b.name,"pl"));
 
   return `
@@ -934,10 +983,16 @@ function CwiczeniaTab(){
         <button class="chip ${state.exerciseMuscleFilter===m?'active':''}" onclick="state.exerciseMuscleFilter='${m}'; render();">${m}</button>
       `).join("")}
     </div>
+    <div class="chipbar">
+      ${["Wszystkie",...equipmentList()].map(eq=>`
+        <button class="chip ${state.exerciseEquipmentFilter===eq?'active':''}" onclick="state.exerciseEquipmentFilter='${esc(eq)}'; render();">${esc(capitalize(eq))}</button>
+      `).join("")}
+    </div>
     <div class="card">
       ${list.length===0? `<div class="empty">Brak wyników.</div>` : list.map(e=>`
         <div class="exlist-item" onclick="openExerciseDetail('${e.id}')" style="cursor:pointer">
-          <div>${esc(e.name)}<div style="margin-top:2px">${exerciseMuscleTags(e)}</div></div>
+          ${exerciseThumb(e,36,"margin-right:10px;")}
+          <div>${esc(e.name)}<div style="margin-top:2px">${exerciseMuscleTags(e,2)}</div></div>
           ${e.custom && e.createdBy===currentUser?.id? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteCustomExercise('${e.id}')">Usuń</button>` : `<span class="muted">›</span>`}
         </div>`).join("")}
     </div>
@@ -1041,7 +1096,18 @@ function ExerciseDetailSheet(){
     <div class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${esc(ex.name)}</div>
-      <div style="margin-bottom:12px">${exerciseMuscleTags(ex)}</div>
+      ${ex.gifUrl? `
+        <img src="${esc(ex.gifUrl)}" alt="${esc(ex.name)}" style="width:100%;max-width:260px;display:block;margin:0 auto 10px;border-radius:12px;background:var(--card2)">
+        <div class="muted" style="text-align:center;font-size:11px;margin-bottom:12px">${EXERCISE_MEDIA_ATTRIBUTION}</div>
+      ` : ""}
+      <div style="margin-bottom:12px">
+        ${exerciseMuscleTags(ex)}
+        ${ex.equipment? `<span class="tag">${esc(capitalize(ex.equipment))}</span>` : ""}
+      </div>
+      ${ex.instructionsPl? `
+        <h2 class="section">Jak wykonać</h2>
+        <div class="card" style="white-space:pre-line">${esc(ex.instructionsPl)}</div>
+      ` : ""}
       <h2 class="section">Rekord (szac. 1RM)</h2>
       <div class="card">${best? `<b>${fmtWeight(best)} ${unitLabel()}</b>` : `<span class="muted">Brak danych</span>`}</div>
       <h2 class="section">Ostatnie sesje</h2>
