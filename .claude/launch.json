@@ -3,8 +3,11 @@
   "configurations": [
     {
       "name": "fitlog",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-I", "-c", "import functools,http.server,socketserver; Handler=functools.partial(http.server.SimpleHTTPRequestHandler, directory='/Users/hubert/Desktop/dev/claude'); socketserver.TCPServer.allow_reuse_address=True; socketserver.TCPServer(('',8791),Handler).serve_forever()"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "const http=require('http'),fs=require('fs'),path=require('path');http.createServer((req,res)=>{let p=path.join('/Users/hubert/Desktop/dev/claude',decodeURIComponent(req.url.split('?')[0]));if(fs.existsSync(p)&&fs.statSync(p).isDirectory())p=path.join(p,'index.html');if(fs.existsSync(p)&&fs.statSync(p).isFile()){const ext=path.extname(p);const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.json':'application/json','.webmanifest':'application/manifest+json'}[ext]||'application/octet-stream';res.writeHead(200,{'Content-Type':mime});fs.createReadStream(p).pipe(res);}else{res.writeHead(404);res.end('Not Found');}}).listen(8791);"
+      ],
       "port": 8791
     }
   ]

@@ -124,65 +124,10 @@ nav.bottomnav .ic{font-size:20px;line-height:1}
 /* ---------- data: exercise catalogue ---------- */
 const MUSCLES = ["Klatka piersiowa","Plecy","Nogi","Barki (przód)","Barki (bok)","Barki (tył)","Biceps","Triceps","Brzuch","Pośladki","Łydki","Przedramiona","Całe ciało"];
 
-const RAW_EXERCISES = [
-  ["Wyciskanie sztangi na ławce płaskiej","Klatka piersiowa"],
-  ["Wyciskanie sztangi na ławce skośnej","Klatka piersiowa"],
-  ["Wyciskanie hantli na ławce płaskiej","Klatka piersiowa"],
-  ["Wyciskanie hantli na ławce skośnej","Klatka piersiowa"],
-  ["Rozpiętki z hantlami","Klatka piersiowa"],
-  ["Krzyżowanie linek wyciągu (cable fly)","Klatka piersiowa"],
-  ["Pompki na poręczach (dipy)","Klatka piersiowa"],
-  ["Wyciskanie na maszynie (chest press)","Klatka piersiowa"],
-  ["Pompki klasyczne","Klatka piersiowa"],
-  ["Martwy ciąg","Plecy"],
-  ["Podciąganie na drążku","Plecy"],
-  ["Wiosłowanie sztangą w opadzie","Plecy"],
-  ["Wiosłowanie hantlą jednorącz","Plecy"],
-  ["Ściąganie drążka wyciągu górnego (lat pulldown)","Plecy"],
-  ["Wiosłowanie na maszynie (siedząc)","Plecy"],
-  ["Hiperekstensje","Plecy"],
-  ["Przysiad ze sztangą","Nogi"],
-  ["Przysiad przedni (front squat)","Nogi"],
-  ["Wykroki z hantlami","Nogi"],
-  ["Prostowanie nóg na maszynie (leg extension)","Nogi"],
-  ["Uginanie nóg leżąc (leg curl)","Nogi"],
-  ["Wyciskanie nóg na suwnicy (leg press)","Nogi"],
-  ["Martwy ciąg rumuński","Nogi"],
-  ["Wykroki bułgarskie","Nogi"],
-  ["Wyciskanie żołnierskie (OHP)","Barki (przód)"],
-  ["Wyciskanie hantli nad głowę siedząc","Barki (przód)"],
-  ["Unoszenie hantli przodem","Barki (przód)"],
-  ["Unoszenie hantli bokiem","Barki (bok)"],
-  ["Unoszenie linki bokiem (cable)","Barki (bok)"],
-  ["Unoszenie hantli w opadzie (tylny akton)","Barki (tył)"],
-  ["Odwrotne rozpiętki na maszynie","Barki (tył)"],
-  ["Face pull","Barki (tył)"],
-  ["Arnold press","Barki (przód)"],
-  ["Uginanie ramion ze sztangą","Biceps"],
-  ["Uginanie ramion z hantlami (młotkowe)","Biceps"],
-  ["Uginanie ramion na modlitewniku","Biceps"],
-  ["Uginanie ramion na wyciągu dolnym","Biceps"],
-  ["Wyciskanie francuskie","Triceps"],
-  ["Prostowanie ramion na wyciągu górnym","Triceps"],
-  ["Pompki na poręczach wąskim chwytem","Triceps"],
-  ["Wyciskanie sztangi wąskim chwytem","Triceps"],
-  ["Brzuszki","Brzuch"],
-  ["Plank (deska)","Brzuch"],
-  ["Unoszenie nóg w zwisie","Brzuch"],
-  ["Skręty tułowia z obciążeniem (russian twist)","Brzuch"],
-  ["Hip thrust","Pośladki"],
-  ["Odwodzenie nogi w bok na maszynie","Pośladki"],
-  ["Wspięcia na palce stojąc","Łydki"],
-  ["Wspięcia na palce siedząc","Łydki"],
-  ["Uginanie nadgarstków ze sztangą","Przedramiona"],
-  ["Burpees","Całe ciało"],
-];
-
 function slugify(s){
   return "b_"+s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
     .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 }
-const BUILT_IN = RAW_EXERCISES.map(([name,muscle])=>({id:slugify(name),name,muscle,custom:false}));
 function bid(name){ return slugify(name); }
 
 const TEMPLATES = [
@@ -228,14 +173,26 @@ async function syncTable(table, oldList, newList, toRow, context){
   if(newList.length) dbWrite(sb.from(table).upsert(newList.map(toRow)), context);
 }
 
-function customExercises(){ return CACHE.exercises; }
+function customExercises(){ return CACHE.exercises.filter(e=>e.custom); }
 function saveCustomExercises(list){
-  const old = CACHE.exercises;
-  CACHE.exercises = list;
-  syncTable("exercises", old, list, e=>({id:e.id, name:e.name, muscle:e.muscle, created_by:currentUser.id}), "baza ćwiczeń");
+  const oldCustom = customExercises();
+  const builtIn = CACHE.exercises.filter(e=>!e.custom);
+  CACHE.exercises = [...builtIn, ...list];
+  syncTable("exercises", oldCustom, list, e=>({
+    id: e.id,
+    name: e.name,
+    muscle: e.muscle,
+    muscles: e.muscles || (e.muscle ? [e.muscle] : []),
+    created_by: currentUser.id
+  }), "baza ćwiczeń");
 }
-function allExercises(){ return BUILT_IN.concat(customExercises()); }
-function findExercise(id){ return allExercises().find(e=>e.id===id); }
+function allExercises(){ return CACHE.exercises; }
+function findExercise(id){ return CACHE.exercises.find(e=>e.id===id); }
+function exerciseMuscleTags(ex){
+  if(!ex) return "";
+  const list = (ex.muscles && ex.muscles.length)? ex.muscles : (ex.muscle? [ex.muscle] : []);
+  return list.map(m=>`<span class="tag">${esc(m)}</span>`).join(" ");
+}
 
 function routines(){ return CACHE.routines; }
 function saveRoutines(list){
@@ -280,7 +237,14 @@ async function loadAllData(){
     const firstError = [profileRes, exercisesRes, routinesRes, workoutsRes].map(r=>r.error).find(Boolean);
     if(firstError) throw firstError;
     CACHE.profile = profileRes.data || {unit:"kg", track_rir:true};
-    CACHE.exercises = (exercisesRes.data||[]).map(e=>({id:e.id, name:e.name, muscle:e.muscle, custom:true, createdBy:e.created_by}));
+    CACHE.exercises = (exercisesRes.data||[]).map(e=>({
+      id: e.id,
+      name: e.name,
+      muscle: e.muscle || (Array.isArray(e.muscles) && e.muscles.length ? e.muscles[0] : ""),
+      muscles: Array.isArray(e.muscles) ? e.muscles : (e.muscle ? [e.muscle] : []),
+      custom: !!e.created_by,
+      createdBy: e.created_by
+    }));
     CACHE.routines = (routinesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
     CACHE.workouts = (workoutsRes.data||[]).map(rowToWorkout);
     const active = getActive();
@@ -556,7 +520,7 @@ function ExerciseBlock(entry,ei,total){
     <div class="card-row" style="margin-bottom:8px">
       <div>
         <b>${esc(ex? ex.name : "Nieznane ćwiczenie")}</b>
-        <div><span class="tag">${esc(ex? ex.muscle : "")}</span></div>
+        <div style="margin-top:4px">${exerciseMuscleTags(ex)}</div>
       </div>
       <div class="pill-row">
         <button class="btn-sm btn-ghost btn" ${ei===0?"disabled":""} onclick="moveExercise(${ei},-1)">↑</button>
@@ -732,7 +696,7 @@ function ExercisePickerSheet(){
   const q = p.query.trim().toLowerCase();
   let list = allExercises().filter(e=>{
     const matchesQ = !q || e.name.toLowerCase().includes(q);
-    const matchesM = p.muscle==="Wszystkie" || e.muscle===p.muscle;
+    const matchesM = p.muscle==="Wszystkie" || e.muscle===p.muscle || (e.muscles && e.muscles.includes(p.muscle));
     return matchesQ && matchesM;
   }).sort((a,b)=>a.name.localeCompare(b.name,"pl"));
 
@@ -751,7 +715,7 @@ function ExercisePickerSheet(){
       </div>
       ${list.map(e=>`
         <div class="picker-item" onclick="pickExercise('${e.id}')">
-          <div>${esc(e.name)}<div class="muted">${esc(e.muscle)}</div></div>
+          <div>${esc(e.name)}<div class="muted" style="margin-top:2px">${(e.muscles&&e.muscles.length? e.muscles : [e.muscle]).map(m=>esc(m)).join(" • ")}</div></div>
           <span class="muted">+</span>
         </div>`).join("")}
       ${!exactMatch && q? `
@@ -847,7 +811,7 @@ function RoutineEditor(){
       r.exerciseIds.map((id,i)=>{
         const ex = findExercise(id);
         return `<div class="exlist-item">
-          <div>${esc(ex? ex.name : "Nieznane")}<div class="muted">${esc(ex?.muscle||"")}</div></div>
+          <div>${esc(ex? ex.name : "Nieznane")}<div style="margin-top:2px">${exerciseMuscleTags(ex)}</div></div>
           <div class="pill-row">
             <button class="btn btn-sm btn-ghost" ${i===0?"disabled":""} onclick="moveRoutineExercise(${i},-1)">↑</button>
             <button class="btn btn-sm btn-ghost" ${i===r.exerciseIds.length-1?"disabled":""} onclick="moveRoutineExercise(${i},1)">↓</button>
@@ -909,7 +873,10 @@ function StatystykiTab(){
     for(const entry of w.entries){
       const ex = findExercise(entry.exerciseId); if(!ex) continue;
       let v=0; for(const s of entry.sets) if(!s.warmup && s.done && s.weight>0 && s.reps>0) v+=s.weight*s.reps;
-      muscleVol[ex.muscle] = (muscleVol[ex.muscle]||0)+v;
+      const targetMuscles = (ex.muscles && ex.muscles.length) ? ex.muscles : (ex.muscle ? [ex.muscle] : []);
+      for(const m of targetMuscles){
+        muscleVol[m] = (muscleVol[m]||0)+v;
+      }
     }
   }
   const muscleList = Object.entries(muscleVol).sort((a,b)=>b[1]-a[1]);
@@ -955,7 +922,7 @@ function CwiczeniaTab(){
   const q = state.exerciseSearch.trim().toLowerCase();
   const list = allExercises().filter(e=>{
     const mQ = !q || e.name.toLowerCase().includes(q);
-    const mM = state.exerciseMuscleFilter==="Wszystkie" || e.muscle===state.exerciseMuscleFilter;
+    const mM = state.exerciseMuscleFilter==="Wszystkie" || e.muscle===state.exerciseMuscleFilter || (e.muscles && e.muscles.includes(state.exerciseMuscleFilter));
     return mQ && mM;
   }).sort((a,b)=>a.name.localeCompare(b.name,"pl"));
 
@@ -970,7 +937,7 @@ function CwiczeniaTab(){
     <div class="card">
       ${list.length===0? `<div class="empty">Brak wyników.</div>` : list.map(e=>`
         <div class="exlist-item" onclick="openExerciseDetail('${e.id}')" style="cursor:pointer">
-          <div>${esc(e.name)}<div><span class="tag">${esc(e.muscle)}</span></div></div>
+          <div>${esc(e.name)}<div style="margin-top:2px">${exerciseMuscleTags(e)}</div></div>
           ${e.custom && e.createdBy===currentUser?.id? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteCustomExercise('${e.id}')">Usuń</button>` : `<span class="muted">›</span>`}
         </div>`).join("")}
     </div>
@@ -984,11 +951,27 @@ function deleteCustomExercise(id){
   });
 }
 function openNewExerciseForm(){
-  state.exerciseForm = { name:"", muscle:MUSCLES[0], context:"library" };
+  state.exerciseForm = { name:"", muscles:[MUSCLES[0]], context:"library" };
+  render();
+}
+function quickAddExercise(name){
+  state.exerciseForm = { name, muscles:[MUSCLES[0]], context:"picker" };
+  render();
+}
+function toggleExerciseFormMuscle(m){
+  const f = state.exerciseForm;
+  if(!f.muscles) f.muscles = [f.muscle || MUSCLES[0]];
+  const idx = f.muscles.indexOf(m);
+  if(idx>=0){
+    if(f.muscles.length>1) f.muscles.splice(idx,1);
+  } else {
+    f.muscles.push(m);
+  }
   render();
 }
 function ExerciseFormSheet(){
   const f = state.exerciseForm;
+  const selectedMuscles = f.muscles && f.muscles.length ? f.muscles : (f.muscle ? [f.muscle] : [MUSCLES[0]]);
   return `<div class="overlay" onclick="if(event.target===this) closeExerciseForm()">
     <div class="sheet">
       <div class="sheet-handle"></div>
@@ -998,12 +981,15 @@ function ExerciseFormSheet(){
         <input value="${esc(f.name)}" oninput="state.exerciseForm.name=this.value" autofocus>
       </div>
       <div class="field">
-        <label>Partia mięśniowa</label>
-        <select onchange="state.exerciseForm.muscle=this.value">
-          ${MUSCLES.map(m=>`<option value="${esc(m)}" ${f.muscle===m?"selected":""}>${esc(m)}</option>`).join("")}
-        </select>
+        <label>Partie mięśniowe (wybierz jedną lub kilka)</label>
+        <div class="chipbar" style="flex-wrap:wrap;gap:6px;max-height:140px;overflow-y:auto;padding:4px 0">
+          ${MUSCLES.map(m=>{
+            const active = selectedMuscles.includes(m);
+            return `<button type="button" class="chip ${active?'active':''}" onclick="toggleExerciseFormMuscle('${esc(m)}')">${esc(m)}</button>`;
+          }).join("")}
+        </div>
       </div>
-      <div class="pill-row">
+      <div class="pill-row" style="margin-top:14px">
         <button class="btn btn-ghost" style="flex:1" onclick="closeExerciseForm()">Anuluj</button>
         <button class="btn btn-accent" style="flex:1" onclick="saveExerciseForm()">Zapisz</button>
       </div>
@@ -1014,7 +1000,15 @@ function closeExerciseForm(){ state.exerciseForm=null; render(); }
 function saveExerciseForm(){
   const f = state.exerciseForm;
   if(!f.name.trim()) return;
-  const ex = { id:uid(), name:f.name.trim(), muscle:f.muscle, custom:true, createdBy:currentUser.id };
+  const selectedMuscles = f.muscles && f.muscles.length ? f.muscles : (f.muscle ? [f.muscle] : [MUSCLES[0]]);
+  const ex = {
+    id: uid(),
+    name: f.name.trim(),
+    muscle: selectedMuscles[0],
+    muscles: selectedMuscles,
+    custom: true,
+    createdBy: currentUser.id
+  };
   const list = customExercises(); list.push(ex); saveCustomExercises(list);
   const ctx = f.context;
   state.exerciseForm = null;
@@ -1047,7 +1041,7 @@ function ExerciseDetailSheet(){
     <div class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${esc(ex.name)}</div>
-      <span class="tag">${esc(ex.muscle)}</span>
+      <div style="margin-bottom:12px">${exerciseMuscleTags(ex)}</div>
       <h2 class="section">Rekord (szac. 1RM)</h2>
       <div class="card">${best? `<b>${fmtWeight(best)} ${unitLabel()}</b>` : `<span class="muted">Brak danych</span>`}</div>
       <h2 class="section">Ostatnie sesje</h2>
