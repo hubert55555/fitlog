@@ -126,20 +126,6 @@ const EXERCISE_MEDIA_ATTRIBUTION = "© Gym visual — gymvisual.com";
 function capitalize(s){ return s? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 function equipmentList(){ return [...new Set(allExercises().map(e=>e.equipment).filter(Boolean))].sort(); }
 
-function slugify(s){
-  return "b_"+s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
-    .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
-}
-function bid(name){ return slugify(name); }
-
-const TEMPLATES = [
-  { name:"Push (Klatka/Barki/Triceps)", ex:["Wyciskanie sztangi na ławce płaskiej","Wyciskanie żołnierskie (OHP)","Rozpiętki z hantlami","Unoszenie hantli bokiem","Wyciskanie francuskie","Pompki na poręczach (dipy)"] },
-  { name:"Pull (Plecy/Biceps)", ex:["Martwy ciąg","Podciąganie na drążku","Wiosłowanie sztangą w opadzie","Ściąganie drążka wyciągu górnego (lat pulldown)","Uginanie ramion ze sztangą","Face pull"] },
-  { name:"Legs (Nogi)", ex:["Przysiad ze sztangą","Martwy ciąg rumuński","Wykroki z hantlami","Prostowanie nóg na maszynie (leg extension)","Uginanie nóg leżąc (leg curl)","Wspięcia na palce stojąc"] },
-  { name:"Upper (Góra ciała)", ex:["Wyciskanie sztangi na ławce płaskiej","Wiosłowanie sztangą w opadzie","Wyciskanie żołnierskie (OHP)","Ściąganie drążka wyciągu górnego (lat pulldown)","Uginanie ramion ze sztangą","Wyciskanie francuskie"] },
-  { name:"Lower (Dół ciała)", ex:["Przysiad ze sztangą","Martwy ciąg rumuński","Wyciskanie nóg na suwnicy (leg press)","Uginanie nóg leżąc (leg curl)","Wspięcia na palce stojąc","Hip thrust"] },
-].map(t=>({name:t.name, exerciseIds:t.ex.map(bid)}));
-
 /* ---------- backend (Supabase) ---------- */
 const SUPABASE_URL = "https://kazerxhglkvzvghysthi.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HgepJOMkgDApTjafGI1X3A_meVFWIut";
@@ -805,20 +791,14 @@ function PlanyTab(){
         <span class="muted">${state.templatesOpen? "▾" : "▸"}</span>
       </div>
     </div>
-    ${state.templatesOpen? TEMPLATES.map(t=>`
-      <div class="card">
-        <div class="card-row">
-          <div><b>${esc(t.name)}</b><div class="muted">${plCount(t.exerciseIds.length)}: ${t.exerciseIds.map(id=>findExercise(id)?.name).filter(Boolean).join(", ")}</div></div>
-        </div>
-        <button class="btn btn-sm btn-ghost btn-block" style="margin-top:10px" onclick="addTemplate('${esc(t.name)}')">Dodaj do moich planów</button>
-      </div>`).join("") : ""}
-    ${state.templatesOpen? CACHE.publicTemplates.map(t=>`
+    ${state.templatesOpen? (CACHE.publicTemplates.length===0? `<div class="empty">Brak gotowych szablonów.</div>` :
+      CACHE.publicTemplates.map(t=>`
       <div class="card">
         <div class="card-row">
           <div><b>${esc(t.name)}</b><div class="muted">${plCount(t.exerciseIds.length)}: ${t.exerciseIds.map(id=>findExercise(id)?.name).filter(Boolean).join(", ")}</div></div>
         </div>
         <button class="btn btn-sm btn-ghost btn-block" style="margin-top:10px" onclick="addDbTemplate('${t.id}')">Dodaj do moich planów</button>
-      </div>`).join("") : ""}
+      </div>`).join("")) : ""}
   `;
 }
 function newRoutine(){ state.editingRoutine = { id:null, name:"Nowy plan", exerciseIds:[], isTemplate:false }; render(); }
@@ -831,13 +811,6 @@ function deleteRoutine(id){
   askConfirm("Usunąć ten plan?", ()=>{
     saveRoutines(routines().filter(x=>x.id!==id)); render();
   });
-}
-function addTemplate(name){
-  const t = TEMPLATES.find(x=>x.name===name);
-  const list = routines();
-  list.push({ id:uid(), name:t.name, exerciseIds:[...t.exerciseIds], isTemplate:false });
-  saveRoutines(list);
-  render();
 }
 function addDbTemplate(id){
   const t = CACHE.publicTemplates.find(x=>x.id===id);
