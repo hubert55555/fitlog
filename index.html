@@ -145,7 +145,7 @@ const SUPABASE_URL = "https://kazerxhglkvzvghysthi.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HgepJOMkgDApTjafGI1X3A_meVFWIut";
 let sb = null;
 let currentUser = null;
-let CACHE = { profile:null, exercises:[], routines:[], workouts:[] };
+let CACHE = { profile:null, exercises:[], routines:[], workouts:[], publicTemplates:[] };
 
 const STORAGE_OK = (()=>{
   try{ const k="__fitlog_test__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }
@@ -210,7 +210,7 @@ function routines(){ return CACHE.routines; }
 function saveRoutines(list){
   const old = CACHE.routines;
   CACHE.routines = list;
-  syncTable("routines", old, list, r=>({id:r.id, user_id:currentUser.id, name:r.name, exercise_ids:r.exerciseIds}), "plan");
+  syncTable("routines", old, list, r=>({id:r.id, user_id:currentUser.id, name:r.name, exercise_ids:r.exerciseIds, is_template:!!r.isTemplate}), "plan");
 }
 function history(){ return CACHE.workouts.filter(w=>w.endedAt); }
 function saveHistory(list){
@@ -232,6 +232,7 @@ function setUnit(u){
   dbWrite(sb.from("profiles").upsert({id:currentUser.id, unit:u, track_rir:CACHE.profile.track_rir}), "ustawienia");
 }
 function getTrackRir(){ return CACHE.profile? CACHE.profile.track_rir : true; }
+function isAdmin(){ return !!(CACHE.profile && CACHE.profile.is_admin); }
 function setTrackRir(v){
   CACHE.profile.track_rir=v;
   dbWrite(sb.from("profiles").upsert({id:currentUser.id, unit:CACHE.profile.unit, track_rir:v}), "ustawienia");
@@ -253,13 +254,14 @@ async function fetchAllExercises(){
 async function loadAllData(){
   const uid = currentUser.id;
   try{
-    const [profileRes, exercisesRes, routinesRes, workoutsRes] = await Promise.all([
+    const [profileRes, exercisesRes, routinesRes, workoutsRes, templatesRes] = await Promise.all([
       sb.from("profiles").select("*").eq("id",uid).maybeSingle(),
       fetchAllExercises(),
       sb.from("routines").select("*").eq("user_id",uid),
       sb.from("workouts").select("*").eq("user_id",uid),
+      sb.from("routines").select("*").eq("is_template",true),
     ]);
-    const firstError = [profileRes, exercisesRes, routinesRes, workoutsRes].map(r=>r.error).find(Boolean);
+    const firstError = [profileRes, exercisesRes, routinesRes, workoutsRes, templatesRes].map(r=>r.error).find(Boolean);
     if(firstError) throw firstError;
     CACHE.profile = profileRes.data || {unit:"kg", track_rir:true};
     CACHE.exercises = (exercisesRes.data||[]).map(e=>({
@@ -279,8 +281,9 @@ async function loadAllData(){
       // "Extra columns" comment in supabase_exercises.sql for how to add a language switcher.
       instructionsPl: e.instructions_pl || "",
     }));
-    CACHE.routines = (routinesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
+    CACHE.routines = (routinesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[], isTemplate:!!r.is_template}));
     CACHE.workouts = (workoutsRes.data||[]).map(rowToWorkout);
+    CACHE.publicTemplates = (templatesRes.data||[]).map(r=>({id:r.id, name:r.name, exerciseIds:r.exercise_ids||[]}));
     const active = getActive();
     if(active){ state.workout = active; state.workout.mode="live"; }
     state.authLoading = false;
@@ -809,9 +812,16 @@ function PlanyTab(){
         </div>
         <button class="btn btn-sm btn-ghost btn-block" style="margin-top:10px" onclick="addTemplate('${esc(t.name)}')">Dodaj do moich planów</button>
       </div>`).join("") : ""}
+    ${state.templatesOpen? CACHE.publicTemplates.map(t=>`
+      <div class="card">
+        <div class="card-row">
+          <div><b>${esc(t.name)}</b><div class="muted">${plCount(t.exerciseIds.length)}: ${t.exerciseIds.map(id=>findExercise(id)?.name).filter(Boolean).join(", ")}</div></div>
+        </div>
+        <button class="btn btn-sm btn-ghost btn-block" style="margin-top:10px" onclick="addDbTemplate('${t.id}')">Dodaj do moich planów</button>
+      </div>`).join("") : ""}
   `;
 }
-function newRoutine(){ state.editingRoutine = { id:null, name:"Nowy plan", exerciseIds:[] }; render(); }
+function newRoutine(){ state.editingRoutine = { id:null, name:"Nowy plan", exerciseIds:[], isTemplate:false }; render(); }
 function editRoutine(id){
   const r = routines().find(x=>x.id===id);
   if(r) state.editingRoutine = JSON.parse(JSON.stringify(r));
@@ -825,7 +835,15 @@ function deleteRoutine(id){
 function addTemplate(name){
   const t = TEMPLATES.find(x=>x.name===name);
   const list = routines();
-  list.push({ id:uid(), name:t.name, exerciseIds:[...t.exerciseIds] });
+  list.push({ id:uid(), name:t.name, exerciseIds:[...t.exerciseIds], isTemplate:false });
+  saveRoutines(list);
+  render();
+}
+function addDbTemplate(id){
+  const t = CACHE.publicTemplates.find(x=>x.id===id);
+  if(!t) return;
+  const list = routines();
+  list.push({ id:uid(), name:t.name, exerciseIds:[...t.exerciseIds], isTemplate:false });
   saveRoutines(list);
   render();
 }
@@ -851,6 +869,13 @@ function RoutineEditor(){
         </div>`;
       }).join("")}
     <button class="btn btn-ghost btn-block" style="margin:10px 0" onclick="state.picker={target:'routine',query:'',muscle:'Wszystkie',equipment:'Wszystkie'}; render();">+ Dodaj ćwiczenie</button>
+
+    ${isAdmin()? `
+      <label class="chip ${r.isTemplate?'active':''}" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" ${r.isTemplate?"checked":""} onchange="state.editingRoutine.isTemplate=this.checked; render();">
+        Udostępnij jako gotowy szablon dla wszystkich
+      </label>
+    ` : ""}
 
     <div class="pill-row">
       <button class="btn btn-ghost" style="flex:1" onclick="state.editingRoutine=null; render();">Anuluj</button>
@@ -1159,7 +1184,8 @@ function SettingsSheet(){
       </div>
       <div class="field">
         <label>Konto</label>
-        <div class="muted" style="margin-bottom:8px">${esc(currentUser?.email || "")}</div>
+        <div class="muted" style="margin-bottom:8px">${esc(currentUser?.email || "")}${isAdmin()? ' · <span style="color:var(--accent)">administrator</span>' : ""}</div>
+        ${isAdmin()? `<div class="muted" style="margin-bottom:8px;font-size:12px">Możesz oznaczyć dowolny plan jako gotowy szablon widoczny dla wszystkich — przełącznik jest w edytorze planu.</div>` : ""}
         <button class="btn btn-danger btn-block" onclick="state.settingsOpen=false; signOut();">Wyloguj się</button>
       </div>
       <button class="btn btn-ghost btn-block" onclick="state.settingsOpen=false; render();">Zamknij</button>
@@ -1181,7 +1207,7 @@ function afterRender(){}
         loadAllData();
       } else {
         state.authLoading = false;
-        CACHE = { profile:null, exercises:[], routines:[], workouts:[] };
+        CACHE = { profile:null, exercises:[], routines:[], workouts:[], publicTemplates:[] };
         state.workout = null;
         render();
       }
